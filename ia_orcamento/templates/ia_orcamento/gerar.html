@@ -1,0 +1,19 @@
+<h1>Gerar orçamento com IA</h1>
+
+<form method="POST">
+    {% csrf_token %}
+    
+    <textarea name="descricao" placeholder="Descreva o serviço"></textarea>
+
+    <button type="submit">Gerar orçamento</button>
+
+</form>
+
+{% if resultado %}
+<h2>Itens sugeridos</h2>
+
+<pre>
+{{ resultado }}
+</pre>
+
+{% endif %}
