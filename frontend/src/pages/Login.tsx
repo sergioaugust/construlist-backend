@@ -31,7 +31,7 @@ export default function Login({ onLogin }: LoginProps) {
     if (!username || !password) { setError('Preencha usuário e senha.'); return }
     setLoading(true)
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/login/', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/api/login/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
@@ -55,7 +55,7 @@ export default function Login({ onLogin }: LoginProps) {
     if (!forgotEmail) { setError('Digite seu e-mail.'); return }
     setLoading(true)
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/password-reset/', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/api/password-reset/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: forgotEmail }),
@@ -78,7 +78,7 @@ export default function Login({ onLogin }: LoginProps) {
     if (!forgotCode) { setError('Digite o código recebido.'); return }
     setLoading(true)
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/password-reset/verify/', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/api/password-reset/verify/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: forgotEmail, code: forgotCode }),
@@ -102,7 +102,7 @@ export default function Login({ onLogin }: LoginProps) {
     if (newPassword.length < 6)        { setError('Mínimo 6 caracteres.'); return }
     setLoading(true)
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/password-reset/confirm/', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/api/password-reset/confirm/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: forgotEmail, code: forgotCode, new_password: newPassword }),
