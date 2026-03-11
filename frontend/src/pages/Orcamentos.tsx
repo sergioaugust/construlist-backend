@@ -588,9 +588,10 @@ function DetalheOrcamento({ orc, onBack }: { orc: Orcamento; onBack: () => void;
       .finally(() => setLoading(false))
   }, [orc.id])
 
-  const gerarPDF = () => {
-    window.open(`http://localhost:8000/api/orcamentos/${orc.id}/gerar_pdf/`, '_blank')
-  }
+ const gerarPDF = () => {
+  const base = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+  window.open(`${base}/api/orcamentos/${orc.id}/gerar_pdf/`, '_blank')
+}
 
   const materiais = itens.filter(i => i.tipo === 'material')
   const maoDeObra = itens.filter(i => i.tipo === 'mao_de_obra')
