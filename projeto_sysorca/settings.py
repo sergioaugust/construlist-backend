@@ -15,6 +15,10 @@ ALLOWED_HOSTS = [
     '.railway.app',
     '.up.railway.app',
 ]
+CSRF_TRUSTED_ORIGINS = [
+    "https://construlist.up.railway.app",
+    "https://construlist-backend.vercel.app",
+]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
