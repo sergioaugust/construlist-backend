@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Plus, Search, Phone, Mail, MapPin, User, X, Loader2, Building2, Hash } from 'lucide-react'
+import { Plus, Search, Phone, Mail, MapPin, User, X, Loader2,} from 'lucide-react'
 import api from '../services/api'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
