@@ -27,7 +27,8 @@ export default function App() {
     <BrowserRouter>
       <div className="flex h-screen overflow-hidden bg-gray-50">
         <Sidebar onLogout={handleLogout} />
-        <main className="flex-1 overflow-y-auto">
+        {/* pt-16 no mobile para não sobrepor o botão hamburguer, lg:pt-0 no desktop */}
+        <main className="flex-1 overflow-y-auto pt-16 lg:pt-0">
           <Routes>
             <Route path="/"           element={<Dashboard />} />
             <Route path="/clientes"   element={<Clientes />} />
