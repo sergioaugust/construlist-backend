@@ -103,6 +103,23 @@ const iaItemToForm = (item: IAItem, tipo: 'material' | 'mao_de_obra'): ItemForm 
   valor_unitario: Number(item.valor_unitario) || 0,
 })
 
+// ── Helper para gerar PDF com token ──────────────────────────────────────────
+const gerarPDFComToken = (id: number) => {
+  const token = localStorage.getItem('token')
+  fetch(`${API_URL}/api/orcamentos/${id}/gerar_pdf/`, {
+    headers: { Authorization: `Bearer ${token}` }
+  })
+    .then(r => {
+      if (!r.ok) throw new Error('Erro ao gerar PDF')
+      return r.blob()
+    })
+    .then(blob => {
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+    })
+    .catch(() => alert('Erro ao gerar PDF. Tente novamente.'))
+}
+
 function useModal(onClose: () => void) {
   const overlayRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -158,7 +175,7 @@ function ConfirmModal({ msg, sub, onConfirm, onCancel, danger = false }:
   )
 }
 
-// ── Item Row — CORRIGIDO autocomplete com onMouseDown ─────────────────────────
+// ── Item Row ──────────────────────────────────────────────────────────────────
 function ItemRow({ item, onChange, onRemove }:
   { item: ItemForm; onChange: (k: string, f: keyof ItemForm, v: string) => void; onRemove: (k: string) => void }) {
   const [sugs, setSugs] = useState<typeof SUGESTOES_ITENS>([])
@@ -191,15 +208,15 @@ function ItemRow({ item, onChange, onRemove }:
   }
 
   return (
-    <div className="grid grid-cols-[1fr_90px_80px_110px_90px_32px] gap-2 items-center">
+    <div className="grid grid-cols-[1fr_70px_60px_100px_80px_32px] sm:grid-cols-[1fr_90px_80px_110px_90px_32px] gap-1.5 sm:gap-2 items-center">
       <div ref={wrapRef} className="relative">
         <input
           type="text"
-          placeholder="Descrição do item..."
+          placeholder="Descrição..."
           value={item.descricao}
           onChange={e => onChange(item._key, 'descricao', e.target.value)}
           onFocus={() => { if (sugs.length > 0) setShowSugs(true) }}
-          className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+          className="w-full px-2 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
         />
         {showSugs && sugs.length > 0 && (
           <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-30 overflow-hidden">
@@ -209,7 +226,7 @@ function ItemRow({ item, onChange, onRemove }:
                 type="button"
                 onMouseDown={e => { e.preventDefault(); pickSug(s) }}
                 className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex items-center justify-between gap-2 transition-colors">
-                <span className="text-gray-800 font-medium">{s.descricao}</span>
+                <span className="text-gray-800 font-medium truncate">{s.descricao}</span>
                 <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
                   {s.unidade} · {fmt(s.valor_unitario)}
                 </span>
@@ -220,14 +237,14 @@ function ItemRow({ item, onChange, onRemove }:
       </div>
       <input type="text" placeholder="un" value={item.unidade}
         onChange={e => onChange(item._key, 'unidade', e.target.value)}
-        className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+        className="px-2 py-2 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
       <input type="number" min="0" step="0.01" value={item.quantidade}
         onChange={e => onChange(item._key, 'quantidade', e.target.value)}
-        className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+        className="px-2 py-2 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
       <input type="number" min="0" step="0.01" placeholder="0,00" value={item.valor_unitario}
         onChange={e => onChange(item._key, 'valor_unitario', e.target.value)}
-        className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
-      <div className="text-sm font-semibold text-gray-700 text-right pr-1">{fmt(calcSub(item))}</div>
+        className="px-2 py-2 border border-gray-200 rounded-xl text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+      <div className="text-sm font-semibold text-gray-700 text-right pr-1 truncate">{fmt(calcSub(item))}</div>
       <button onClick={() => onRemove(item._key)}
         className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-all">
         <Trash2 size={14} />
@@ -314,14 +331,19 @@ function OrcamentoForm({ clientes, onClose, onSaved, orcamentoEdit }: OrcamentoF
   const totalMao = maoDeObra.reduce((s, i) => s + calcSub(i), 0)
   const totalGeral = totalMat + totalMao
 
+  // ── Gerar com IA — CORRIGIDO com token ───────────────────────────────────
   const gerarIA = async () => {
     if (!iaPrompt.trim()) return
     setIaLoading(true)
     setIaObservacao('')
     try {
+      const token = localStorage.getItem('token')
       const resp = await fetch(`${API_URL}/ia/gerar/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({ descricao: iaPrompt }),
       })
       const data: IAResponse = await resp.json()
@@ -394,12 +416,12 @@ function OrcamentoForm({ clientes, onClose, onSaved, orcamentoEdit }: OrcamentoF
   return (
     <>
       <div ref={overlayRef} onClick={handleOverlay}
-        className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-4 flex flex-col">
+        className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-2 sm:my-4 flex flex-col">
 
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10">
+          <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10">
             <div>
-              <h2 className="text-lg font-bold text-gray-900">
+              <h2 className="text-base sm:text-lg font-bold text-gray-900">
                 {editando ? 'Editar Orçamento' : 'Novo Orçamento'}
               </h2>
               <p className="text-xs text-gray-400 mt-0.5">
@@ -416,11 +438,11 @@ function OrcamentoForm({ clientes, onClose, onSaved, orcamentoEdit }: OrcamentoF
               <Loader2 size={20} className="animate-spin mr-2" /> Carregando itens...
             </div>
           ) : (
-            <div className="px-6 py-5 space-y-6">
+            <div className="px-4 sm:px-6 py-5 space-y-5">
 
               <section className="bg-gray-50 rounded-2xl p-4">
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Cliente</p>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-semibold text-gray-500 mb-1.5 block">
                       Selecionar Cliente <span className="text-red-500">*</span>
@@ -479,8 +501,8 @@ function OrcamentoForm({ clientes, onClose, onSaved, orcamentoEdit }: OrcamentoF
 
               <section>
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Itens do Orçamento</p>
-                <div className="grid grid-cols-[1fr_90px_80px_110px_90px_32px] gap-2 mb-2 px-1">
-                  {['Descrição', 'Unidade', 'Qtd.', 'Valor Unit.', 'Total', ''].map(h => (
+                <div className="grid grid-cols-[1fr_70px_60px_100px_80px_32px] sm:grid-cols-[1fr_90px_80px_110px_90px_32px] gap-1.5 sm:gap-2 mb-2 px-1">
+                  {['Descrição', 'Und.', 'Qtd.', 'Unit.', 'Total', ''].map(h => (
                     <div key={h} className="text-xs font-bold text-gray-400 uppercase tracking-wide">{h}</div>
                   ))}
                 </div>
@@ -528,16 +550,16 @@ function OrcamentoForm({ clientes, onClose, onSaved, orcamentoEdit }: OrcamentoF
                 </div>
 
                 <div className="flex justify-end mt-4">
-                  <div className="bg-gray-900 text-white rounded-xl px-5 py-3 flex items-center gap-4">
+                  <div className="bg-gray-900 text-white rounded-xl px-4 sm:px-5 py-3 flex items-center gap-3 sm:gap-4">
                     <span className="text-sm font-semibold opacity-80">Total Geral</span>
-                    <span className="text-xl font-bold text-blue-300">{fmt(totalGeral)}</span>
+                    <span className="text-lg sm:text-xl font-bold text-blue-300">{fmt(totalGeral)}</span>
                   </div>
                 </div>
               </section>
 
               <section className="bg-gray-50 rounded-2xl p-4">
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Detalhes</p>
-                <div className="grid grid-cols-2 gap-3 mb-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Validade do Orçamento</label>
                     <input type="date" value={validade} onChange={e => setValidade(e.target.value)}
@@ -561,7 +583,7 @@ function OrcamentoForm({ clientes, onClose, onSaved, orcamentoEdit }: OrcamentoF
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white rounded-b-2xl">
+          <div className="flex items-center justify-end gap-3 px-4 sm:px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white rounded-b-2xl">
             <button onClick={handleClose}
               className="px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-all">
               Cancelar
@@ -600,35 +622,31 @@ function DetalheOrcamento({ orc, onBack, onEdit }: { orc: Orcamento; onBack: () 
       .finally(() => setLoading(false))
   }, [orc.id])
 
-  const gerarPDF = () => {
-    window.open(`${API_URL}/api/orcamentos/${orc.id}/gerar_pdf/`, '_blank')
-  }
-
   const materiais = itens.filter(i => i.tipo === 'material')
   const maoDeObra = itens.filter(i => i.tipo === 'mao_de_obra')
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-4xl mx-auto">
       <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-5 transition-colors">
         <ChevronRight size={15} className="rotate-180" /> Voltar aos orçamentos
       </button>
 
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
         <div>
           <div className="flex items-center gap-3 mb-1">
             <span className="text-xs font-bold text-gray-400">#{orc.id}</span>
             <StatusBadge status={orc.status} />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">{orc.titulo}</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{orc.titulo}</h1>
           <p className="text-sm text-gray-500 mt-0.5">{orc.cliente_nome}</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={onEdit}
-            className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-semibold transition-all">
+            className="flex items-center gap-2 px-3 sm:px-4 py-2.5 border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-semibold transition-all">
             <Pencil size={15} /> Editar
           </button>
-          <button onClick={gerarPDF}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm">
+          <button onClick={() => gerarPDFComToken(orc.id)}
+            className="flex items-center gap-2 px-3 sm:px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm">
             <FileText size={15} /> Gerar PDF
           </button>
         </div>
@@ -646,28 +664,30 @@ function DetalheOrcamento({ orc, onBack, onEdit }: { orc: Orcamento; onBack: () 
                 <Package size={14} className="text-blue-500" />
                 <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">Materiais / Itens</span>
               </div>
-              <table className="w-full">
-                <thead>
-                  <tr className="text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100">
-                    <th className="text-left px-5 py-2.5">Descrição</th>
-                    <th className="text-center px-3 py-2.5">Unid.</th>
-                    <th className="text-center px-3 py-2.5">Qtd.</th>
-                    <th className="text-right px-3 py-2.5">Unit.</th>
-                    <th className="text-right px-5 py-2.5">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {materiais.map((item, i) => (
-                    <tr key={i} className={`text-sm ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
-                      <td className="px-5 py-3 text-gray-800">{item.descricao}</td>
-                      <td className="px-3 py-3 text-center text-gray-500">{item.unidade}</td>
-                      <td className="px-3 py-3 text-center text-gray-500">{item.quantidade}</td>
-                      <td className="px-3 py-3 text-right text-gray-500">{fmt(Number(item.valor_unitario))}</td>
-                      <td className="px-5 py-3 text-right font-semibold text-gray-700">{fmt(Number(item.subtotal || 0))}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[400px]">
+                  <thead>
+                    <tr className="text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100">
+                      <th className="text-left px-5 py-2.5">Descrição</th>
+                      <th className="text-center px-3 py-2.5">Unid.</th>
+                      <th className="text-center px-3 py-2.5">Qtd.</th>
+                      <th className="text-right px-3 py-2.5">Unit.</th>
+                      <th className="text-right px-5 py-2.5">Total</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {materiais.map((item, i) => (
+                      <tr key={i} className={`text-sm ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
+                        <td className="px-5 py-3 text-gray-800">{item.descricao}</td>
+                        <td className="px-3 py-3 text-center text-gray-500">{item.unidade}</td>
+                        <td className="px-3 py-3 text-center text-gray-500">{item.quantidade}</td>
+                        <td className="px-3 py-3 text-right text-gray-500">{fmt(Number(item.valor_unitario))}</td>
+                        <td className="px-5 py-3 text-right font-semibold text-gray-700">{fmt(Number(item.subtotal || 0))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
@@ -677,35 +697,37 @@ function DetalheOrcamento({ orc, onBack, onEdit }: { orc: Orcamento; onBack: () 
                 <Hammer size={14} className="text-orange-500" />
                 <span className="text-xs font-bold text-orange-600 uppercase tracking-wide">Mão de Obra</span>
               </div>
-              <table className="w-full">
-                <thead>
-                  <tr className="text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100">
-                    <th className="text-left px-5 py-2.5">Descrição</th>
-                    <th className="text-center px-3 py-2.5">Unid.</th>
-                    <th className="text-center px-3 py-2.5">Qtd.</th>
-                    <th className="text-right px-3 py-2.5">Unit.</th>
-                    <th className="text-right px-5 py-2.5">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {maoDeObra.map((item, i) => (
-                    <tr key={i} className={`text-sm ${i % 2 === 0 ? 'bg-white' : 'bg-orange-50/30'}`}>
-                      <td className="px-5 py-3 text-gray-800">{item.descricao}</td>
-                      <td className="px-3 py-3 text-center text-gray-500">{item.unidade}</td>
-                      <td className="px-3 py-3 text-center text-gray-500">{item.quantidade}</td>
-                      <td className="px-3 py-3 text-right text-gray-500">{fmt(Number(item.valor_unitario))}</td>
-                      <td className="px-5 py-3 text-right font-semibold text-gray-700">{fmt(Number(item.subtotal || 0))}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[400px]">
+                  <thead>
+                    <tr className="text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100">
+                      <th className="text-left px-5 py-2.5">Descrição</th>
+                      <th className="text-center px-3 py-2.5">Unid.</th>
+                      <th className="text-center px-3 py-2.5">Qtd.</th>
+                      <th className="text-right px-3 py-2.5">Unit.</th>
+                      <th className="text-right px-5 py-2.5">Total</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {maoDeObra.map((item, i) => (
+                      <tr key={i} className={`text-sm ${i % 2 === 0 ? 'bg-white' : 'bg-orange-50/30'}`}>
+                        <td className="px-5 py-3 text-gray-800">{item.descricao}</td>
+                        <td className="px-3 py-3 text-center text-gray-500">{item.unidade}</td>
+                        <td className="px-3 py-3 text-center text-gray-500">{item.quantidade}</td>
+                        <td className="px-3 py-3 text-right text-gray-500">{fmt(Number(item.valor_unitario))}</td>
+                        <td className="px-5 py-3 text-right font-semibold text-gray-700">{fmt(Number(item.subtotal || 0))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
           <div className="flex justify-end">
-            <div className="bg-gray-900 text-white rounded-xl px-6 py-4 flex items-center gap-6">
+            <div className="bg-gray-900 text-white rounded-xl px-4 sm:px-6 py-3 sm:py-4 flex items-center gap-4 sm:gap-6">
               <span className="text-sm font-semibold opacity-70">Total Geral</span>
-              <span className="text-2xl font-bold text-blue-300">{fmt(orc.total_geral)}</span>
+              <span className="text-xl sm:text-2xl font-bold text-blue-300">{fmt(orc.total_geral)}</span>
             </div>
           </div>
         </>
@@ -764,11 +786,6 @@ export default function Orcamentos() {
     fetchAll()
   }
 
-  const gerarPDF = (id: number) => {
-    window.open(`${API_URL}/api/orcamentos/${id}/gerar_pdf/`, '_blank')
-    setMenu(null)
-  }
-
   const filtrados = orcamentos.filter(o =>
     o.titulo?.toLowerCase().includes(busca.toLowerCase()) ||
     o.cliente_nome?.toLowerCase().includes(busca.toLowerCase())
@@ -797,16 +814,16 @@ export default function Orcamentos() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto">
 
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Orçamentos</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Orçamentos</h1>
           <p className="text-sm text-gray-500 mt-0.5">{orcamentos.length} orçamento{orcamentos.length !== 1 ? 's' : ''}</p>
         </div>
         <button onClick={() => setShowNovo(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm hover:shadow-md">
-          <Plus size={16} /> Novo Orçamento
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm hover:shadow-md">
+          <Plus size={16} /> <span className="hidden sm:inline">Novo Orçamento</span><span className="sm:hidden">Novo</span>
         </button>
       </div>
 
@@ -825,25 +842,25 @@ export default function Orcamentos() {
         <div className="text-center py-16 text-gray-400">
           <FileText size={40} className="mx-auto mb-3 opacity-30" />
           <p className="font-medium">Nenhum orçamento encontrado</p>
-          <p className="text-sm mt-1">Clique em "Novo Orçamento" para começar</p>
+          <p className="text-sm mt-1">Clique em "Novo" para começar</p>
         </div>
       ) : (
         <div className="space-y-3">
           {filtrados.map(orc => (
             <div key={orc.id}
-              className="bg-white rounded-2xl border border-gray-100 px-5 py-4 hover:shadow-md transition-all flex items-center gap-4 group">
-              <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 flex-shrink-0">
+              className="bg-white rounded-2xl border border-gray-100 px-3 sm:px-5 py-3 sm:py-4 hover:shadow-md transition-all flex items-center gap-3 sm:gap-4">
+              <div className="w-8 sm:w-9 h-8 sm:h-9 rounded-xl bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 flex-shrink-0">
                 #{orc.id}
               </div>
               <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setDetalhe(orc)}>
-                <p className="font-semibold text-gray-900 truncate">{orc.titulo}</p>
-                <p className="text-xs text-gray-400 mt-0.5">
+                <p className="font-semibold text-gray-900 truncate text-sm sm:text-base">{orc.titulo}</p>
+                <p className="text-xs text-gray-400 mt-0.5 truncate">
                   {orc.cliente_nome} · {new Date(orc.criado_em).toLocaleDateString('pt-BR')}
                 </p>
               </div>
-              <div className="flex items-center gap-3 flex-shrink-0">
+              <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
                 <StatusBadge status={orc.status} />
-                <span className="text-sm font-bold text-gray-800 min-w-[80px] text-right">
+                <span className="text-sm font-bold text-gray-800 hidden sm:block min-w-[80px] text-right">
                   {fmt(orc.total_geral)}
                 </span>
                 <div className="relative" ref={menu === orc.id ? menuRef : undefined}>
@@ -881,7 +898,7 @@ export default function Orcamentos() {
                           <XCircle size={15} className="text-red-500" /> Recusar
                         </button>
                       )}
-                      <button onClick={() => gerarPDF(orc.id)}
+                      <button onClick={() => { gerarPDFComToken(orc.id); setMenu(null) }}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-blue-700 hover:bg-blue-50 transition-colors">
                         <FileText size={15} className="text-blue-500" /> Gerar PDF
                       </button>
