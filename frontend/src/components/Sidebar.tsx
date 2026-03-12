@@ -1,107 +1,200 @@
-import { useState } from 'react'
-import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Users, FileText, Settings, LogOut, ChevronLeft, ChevronRight, HardHat, Menu, X } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { NavLink, useNavigate } from 'react-router-dom'
+import {
+  LayoutDashboard, Users, FileText, User,
+  ChevronLeft, ChevronRight, Menu, X, LogOut
+} from 'lucide-react'
 
-const links = [
-  { to: '/',           icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/clientes',   icon: Users,           label: 'Clientes' },
-  { to: '/orcamentos', icon: FileText,         label: 'Orçamentos' },
-  { to: '/perfil',     icon: Settings,         label: 'Perfil' },
-]
+const API_URL = 'https://construlist.up.railway.app'
 
 interface SidebarProps {
   onLogout: () => void
 }
 
+interface UserInfo {
+  nome: string
+  empresa: string
+}
+
+const NAV = [
+  { to: '/',          icon: LayoutDashboard, label: 'Dashboard'   },
+  { to: '/clientes',  icon: Users,            label: 'Clientes'    },
+  { to: '/orcamentos',icon: FileText,          label: 'Orçamentos'  },
+  { to: '/perfil',    icon: User,              label: 'Perfil'      },
+]
+
 export default function Sidebar({ onLogout }: SidebarProps) {
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed]   = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [userInfo, setUserInfo]     = useState<UserInfo>({ nome: '', empresa: '' })
+  const [menuOpen, setMenuOpen]     = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate()
+
+  // Busca dados do usuário logado
+  useEffect(() => {
+    const token = localStorage.getItem('token')
+    if (!token) return
+    fetch(`${API_URL}/api/me/`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(r => r.json())
+      .then(d => setUserInfo({ nome: d.nome || d.username || '', empresa: d.empresa || '' }))
+      .catch(() => {})
+  }, [])
+
+  // Fecha menu ao clicar fora
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+
+  const handleLogout = () => {
+    localStorage.removeItem('token')
+    onLogout()
+    navigate('/')
+  }
+
+  // Inicial do nome para o avatar
+  const inicial = (userInfo.nome || '?')[0].toUpperCase()
+
+  const NavItems = ({ onClick }: { onClick?: () => void }) => (
+    <nav className="flex-1 px-3 py-4 space-y-1">
+      {NAV.map(({ to, icon: Icon, label }) => (
+        <NavLink
+          key={to}
+          to={to}
+          end={to === '/'}
+          onClick={onClick}
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all
+             ${isActive
+               ? 'bg-blue-600 text-white shadow-sm'
+               : 'text-gray-300 hover:bg-white/10 hover:text-white'
+             }
+             ${collapsed ? 'justify-center' : ''}`
+          }
+        >
+          <Icon size={18} className="flex-shrink-0" />
+          {!collapsed && <span>{label}</span>}
+        </NavLink>
+      ))}
+    </nav>
+  )
+
+  // ── Menu do usuário (canto inferior) ──────────────────────────────────────
+  const UserMenu = ({ showLabel }: { showLabel: boolean }) => (
+    <div ref={menuRef} className="relative px-3 pb-4">
+      <button
+        onClick={() => setMenuOpen(v => !v)}
+        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
+          text-gray-300 hover:bg-white/10 hover:text-white transition-all
+          ${!showLabel ? 'justify-center' : ''}`}
+      >
+        {/* Avatar com inicial */}
+        <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+          {inicial}
+        </div>
+        {showLabel && (
+          <div className="flex-1 min-w-0 text-left">
+            <p className="text-white text-xs font-semibold truncate">
+              {userInfo.nome}
+            </p>
+            {userInfo.empresa && (
+              <p className="text-gray-400 text-xs truncate">{userInfo.empresa}</p>
+            )}
+          </div>
+        )}
+      </button>
+
+      {/* Menu suspenso */}
+      {menuOpen && (
+        <div className="absolute bottom-full left-3 right-3 mb-2 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50">
+          {/* Cabeçalho do menu */}
+          <div className="px-4 py-3 border-b border-gray-100">
+            <p className="text-sm font-semibold text-gray-900 truncate">{userInfo.nome}</p>
+            {userInfo.empresa && (
+              <p className="text-xs text-gray-500 truncate">{userInfo.empresa}</p>
+            )}
+          </div>
+          {/* Botão Sair */}
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors"
+          >
+            <LogOut size={15} className="text-red-500" />
+            Sair
+          </button>
+        </div>
+      )}
+    </div>
+  )
 
   return (
     <>
-      {/* ── Botão hamburguer mobile ────────────────────────────────────────── */}
+      {/* ── MOBILE: botão hamburguer ───────────────────────────────────────── */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="md:hidden fixed top-4 left-4 z-40 bg-[#1e2a3a] text-white p-2 rounded-lg shadow-lg">
+        className="lg:hidden fixed top-4 left-4 z-50 w-10 h-10 bg-[#1e2a3a] text-white rounded-xl flex items-center justify-center shadow-lg"
+      >
         <Menu size={20} />
       </button>
 
-      {/* ── Overlay mobile ────────────────────────────────────────────────── */}
+      {/* ── MOBILE: overlay ───────────────────────────────────────────────── */}
       {mobileOpen && (
         <div
-          className="md:hidden fixed inset-0 bg-black/50 z-40"
+          className="lg:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
-      {/* ── Sidebar ───────────────────────────────────────────────────────── */}
-      <aside className={`
-        fixed md:relative z-50 md:z-auto
-        h-screen bg-[#1e2a3a] text-white flex flex-col
-        transition-all duration-300 ease-in-out
-        ${collapsed ? 'w-16' : 'w-56'}
-        ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+      {/* ── MOBILE: drawer ────────────────────────────────────────────────── */}
+      <div className={`
+        lg:hidden fixed top-0 left-0 h-full w-64 bg-[#1e2a3a] z-50 flex flex-col
+        transform transition-transform duration-300
+        ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
+        <div className="flex items-center justify-between px-4 py-4 border-b border-white/10">
+          <span className="text-white font-bold text-lg tracking-wide">CONSTRULIST</span>
+          <button onClick={() => setMobileOpen(false)} className="text-gray-400 hover:text-white p-1">
+            <X size={20} />
+          </button>
+        </div>
+        <NavItems onClick={() => setMobileOpen(false)} />
+        <div className="border-t border-white/10">
+          <UserMenu showLabel={true} />
+        </div>
+      </div>
 
-        {/* Logo + botão fechar mobile */}
-        <div className={`flex items-center p-4 pt-5 ${collapsed ? 'justify-center' : 'justify-between'}`}>
+      {/* ── DESKTOP: sidebar ──────────────────────────────────────────────── */}
+      <div className={`
+        hidden lg:flex flex-col h-screen bg-[#1e2a3a] sticky top-0
+        transition-all duration-300
+        ${collapsed ? 'w-16' : 'w-56'}
+      `}>
+        {/* Logo + collapse button */}
+        <div className="flex items-center justify-between px-4 py-4 border-b border-white/10">
           {!collapsed && (
-            <div>
-              <h1 className="text-lg font-black text-blue-400 tracking-tight">CONSTRULIST</h1>
-              <p className="text-xs text-gray-500 mt-0.5">Sistema de Orçamentos</p>
-            </div>
+            <span className="text-white font-bold text-base tracking-wide truncate">CONSTRULIST</span>
           )}
-          {collapsed && <HardHat size={22} className="text-blue-400" />}
-
-          {/* Fechar no mobile */}
-          <button onClick={() => setMobileOpen(false)} className="md:hidden text-gray-400 hover:text-white ml-2">
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Botão recolher — só desktop */}
-        <div className={`hidden md:flex px-3 mb-3 ${collapsed ? 'justify-center' : 'justify-end'}`}>
           <button
-            onClick={() => setCollapsed(c => !c)}
-            className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-white/10 transition-colors">
-            {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            onClick={() => setCollapsed(v => !v)}
+            className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-all flex-shrink-0"
+          >
+            {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
         </div>
 
-        {/* Links */}
-        <nav className="flex-1 px-2 space-y-0.5">
-          {links.map(({ to, icon: Icon, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              onClick={() => setMobileOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors
-                ${collapsed ? 'justify-center' : ''}
-                ${isActive ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-white/10'}`
-              }
-              title={collapsed ? label : undefined}
-            >
-              <Icon size={18} className="shrink-0" />
-              {!collapsed && <span>{label}</span>}
-            </NavLink>
-          ))}
-        </nav>
+        <NavItems />
 
-        {/* Rodapé */}
-        <div className={`p-3 border-t border-white/10 space-y-1 ${collapsed ? 'flex flex-col items-center' : ''}`}>
-          <button
-            onClick={onLogout}
-            title={collapsed ? 'Sair' : undefined}
-            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-400 hover:bg-white/10 hover:text-red-400 transition-colors
-              ${collapsed ? 'justify-center w-full' : 'w-full'}`}>
-            <LogOut size={16} className="shrink-0" />
-            {!collapsed && 'Sair'}
-          </button>
-          {!collapsed && <p className="text-xs text-gray-600 px-3">v1.0 • 2026</p>}
+        {/* Separador + User Menu */}
+        <div className="border-t border-white/10">
+          <UserMenu showLabel={!collapsed} />
         </div>
-      </aside>
+      </div>
     </>
   )
 }
