@@ -63,7 +63,10 @@ class OrcamentoViewSet(viewsets.ModelViewSet):
         return Orcamento.objects.filter(usuario=self.request.user).order_by('-criado_em')
 
     def perform_create(self, serializer):
-        serializer.save(usuario=self.request.user)
+    # Calcula o próximo número sequencial para este usuário
+        ultimo = Orcamento.objects.filter(usuario=self.request.user).order_by('-numero').first()
+        proximo_numero = (ultimo.numero + 1) if ultimo else 1
+        serializer.save(usuario=self.request.user, numero=proximo_numero)
 
     @action(detail=True, methods=['get'])
     def gerar_pdf(self, request, pk=None):

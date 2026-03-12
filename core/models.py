@@ -1,6 +1,7 @@
-#OBSERVAÇÃO IMPORTANTE (ENTENDIMENTO REAL) #usuario = ForeignKey(User) # Isso faz o sistema já nascer como SaaS. #Significa: Cada cliente pertence a um usuário. #Sem isso: Todos veriam todos os clientes. Sistema inviável para comercialização.
 from django.db import models
 from django.contrib.auth.models import User
+import random
+from django.utils import timezone
 
 
 class Cliente(models.Model):
@@ -29,22 +30,23 @@ class Orcamento(models.Model):
         ('aprovado', 'Aprovado'),
         ('recusado', 'Recusado'),
     ]
-    usuario              = models.ForeignKey(User, on_delete=models.CASCADE)
-    cliente              = models.ForeignKey(Cliente, on_delete=models.CASCADE)
-    titulo               = models.CharField(max_length=300)
-    descricao            = models.TextField(blank=True)
-    condicoes_pagamento  = models.TextField(blank=True)
-    observacoes          = models.TextField(blank=True)
-    status               = models.CharField(max_length=20, choices=STATUS_CHOICES, default='rascunho')
-    validade_dias        = models.IntegerField(default=15)
-    criado_em            = models.DateTimeField(auto_now_add=True)
+    usuario             = models.ForeignKey(User, on_delete=models.CASCADE)
+    cliente             = models.ForeignKey(Cliente, on_delete=models.CASCADE)
+    numero              = models.PositiveIntegerField(default=1)  # ← sequencial por usuário
+    titulo              = models.CharField(max_length=300)
+    descricao           = models.TextField(blank=True)
+    condicoes_pagamento = models.TextField(blank=True)
+    observacoes         = models.TextField(blank=True)
+    status              = models.CharField(max_length=20, choices=STATUS_CHOICES, default='rascunho')
+    validade_dias       = models.IntegerField(default=15)
+    criado_em           = models.DateTimeField(auto_now_add=True)
 
     @property
     def total_geral(self):
         return sum(item.subtotal for item in self.itens.all())
 
     def __str__(self):
-        return self.titulo
+        return f"#{self.numero} — {self.titulo}"
 
 
 class ItemOrcamento(models.Model):
@@ -66,23 +68,23 @@ class ItemOrcamento(models.Model):
 
     def __str__(self):
         return self.descricao
+
+
 class Perfil(models.Model):
-    usuario = models.OneToOneField(User, on_delete=models.CASCADE, related_name='perfil')
-    nome = models.CharField(max_length=200, blank=True)
-    empresa = models.CharField(max_length=200, blank=True)
-    email = models.EmailField(blank=True)
-    telefone = models.CharField(max_length=20, blank=True)
-    cpf_cnpj = models.CharField(max_length=20, blank=True)
-    endereco = models.CharField(max_length=300, blank=True)
-    logo = models.TextField(blank=True)        # base64
-    assinatura = models.TextField(blank=True)  # base64
+    usuario       = models.OneToOneField(User, on_delete=models.CASCADE, related_name='perfil')
+    nome          = models.CharField(max_length=200, blank=True)
+    empresa       = models.CharField(max_length=200, blank=True)
+    email         = models.EmailField(blank=True)
+    telefone      = models.CharField(max_length=20, blank=True)
+    cpf_cnpj      = models.CharField(max_length=20, blank=True)
+    endereco      = models.CharField(max_length=300, blank=True)
+    logo          = models.TextField(blank=True)
+    assinatura    = models.TextField(blank=True)
     cor_orcamento = models.CharField(max_length=20, blank=True, default='azul')
 
     def __str__(self):
         return f"Perfil de {self.usuario.username}"
 
-import random
-from django.utils import timezone
 
 class PasswordResetCode(models.Model):
     user       = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -91,5 +93,4 @@ class PasswordResetCode(models.Model):
     used       = models.BooleanField(default=False)
 
     def is_valid(self):
-         # Código válido por 15 minutos
-         return not self.used and (timezone.now() - self.created_at).seconds < 900
+        return not self.used and (timezone.now() - self.created_at).seconds < 900
