@@ -2,9 +2,11 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Plus, Search, MoreVertical, Eye, Send, CheckCircle, XCircle,
   FileText, Trash2, X, Loader2, Sparkles, ChevronRight,
-  AlertTriangle, Package, Hammer, Info
+  AlertTriangle, Package, Hammer, Info, Pencil
 } from 'lucide-react'
 import api from '../services/api'
+
+const API_URL = 'https://construlist.up.railway.app'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Cliente { id: number; nome: string }
@@ -45,7 +47,7 @@ interface IAResponse {
   erro?: boolean
 }
 
-// ── Sugestões de itens comuns ─────────────────────────────────────────────────
+// ── Sugestões ─────────────────────────────────────────────────────────────────
 const SUGESTOES_ITENS = [
   { descricao: 'Tinta Suvinil (18L)', unidade: 'lata', valor_unitario: 280, tipo: 'material' },
   { descricao: 'Tinta acrílica premium', unidade: 'L', valor_unitario: 45, tipo: 'material' },
@@ -94,15 +96,13 @@ const newItem = (tipo: 'material' | 'mao_de_obra' = 'material'): ItemForm => ({
 })
 
 const iaItemToForm = (item: IAItem, tipo: 'material' | 'mao_de_obra'): ItemForm => ({
-  _key: uid(),
-  tipo,
+  _key: uid(), tipo,
   descricao: item.descricao || '',
   unidade: item.unidade || 'un',
   quantidade: Number(item.quantidade) || 1,
   valor_unitario: Number(item.valor_unitario) || 0,
 })
 
-// ── ESC + click-outside hook ──────────────────────────────────────────────────
 function useModal(onClose: () => void) {
   const overlayRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -116,7 +116,6 @@ function useModal(onClose: () => void) {
   return { overlayRef, handleOverlay }
 }
 
-// ── Badge ─────────────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
   const c = STATUS_CONFIG[status] || STATUS_CONFIG.rascunho
   return (
@@ -127,7 +126,6 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-// ── Confirm Modal ─────────────────────────────────────────────────────────────
 function ConfirmModal({ msg, sub, onConfirm, onCancel, danger = false }:
   { msg: string; sub?: string; onConfirm: () => void; onCancel: () => void; danger?: boolean }) {
   const { overlayRef, handleOverlay } = useModal(onCancel)
@@ -147,12 +145,12 @@ function ConfirmModal({ msg, sub, onConfirm, onCancel, danger = false }:
         <div className="flex gap-2 justify-end">
           <button onClick={onCancel}
             className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-all">
-            Não, continuar
+            Cancelar
           </button>
           <button onClick={onConfirm}
             className={`px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all
               ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-500 hover:bg-amber-600'}`}>
-            Sim, cancelar
+            Confirmar
           </button>
         </div>
       </div>
@@ -160,7 +158,7 @@ function ConfirmModal({ msg, sub, onConfirm, onCancel, danger = false }:
   )
 }
 
-// ── Item Row ──────────────────────────────────────────────────────────────────
+// ── Item Row — CORRIGIDO autocomplete com onMouseDown ─────────────────────────
 function ItemRow({ item, onChange, onRemove }:
   { item: ItemForm; onChange: (k: string, f: keyof ItemForm, v: string) => void; onRemove: (k: string) => void }) {
   const [sugs, setSugs] = useState<typeof SUGESTOES_ITENS>([])
@@ -176,7 +174,9 @@ function ItemRow({ item, onChange, onRemove }:
   }, [item.descricao])
 
   useEffect(() => {
-    const h = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setShowSugs(false) }
+    const h = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setShowSugs(false)
+    }
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
   }, [])
@@ -186,10 +186,9 @@ function ItemRow({ item, onChange, onRemove }:
     onChange(item._key, 'unidade', s.unidade)
     onChange(item._key, 'valor_unitario', String(s.valor_unitario))
     onChange(item._key, 'tipo', s.tipo as 'material' | 'mao_de_obra')
+    setSugs([])
     setShowSugs(false)
   }
-
-  const sub = calcSub(item)
 
   return (
     <div className="grid grid-cols-[1fr_90px_80px_110px_90px_32px] gap-2 items-center">
@@ -199,12 +198,16 @@ function ItemRow({ item, onChange, onRemove }:
           placeholder="Descrição do item..."
           value={item.descricao}
           onChange={e => onChange(item._key, 'descricao', e.target.value)}
+          onFocus={() => { if (sugs.length > 0) setShowSugs(true) }}
           className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
         />
-        {showSugs && (
+        {showSugs && sugs.length > 0 && (
           <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-30 overflow-hidden">
             {sugs.map(s => (
-              <button key={s.descricao} onClick={() => pickSug(s)}
+              <button
+                key={s.descricao}
+                type="button"
+                onMouseDown={e => { e.preventDefault(); pickSug(s) }}
                 className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex items-center justify-between gap-2 transition-colors">
                 <span className="text-gray-800 font-medium">{s.descricao}</span>
                 <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
@@ -215,21 +218,16 @@ function ItemRow({ item, onChange, onRemove }:
           </div>
         )}
       </div>
-
       <input type="text" placeholder="un" value={item.unidade}
         onChange={e => onChange(item._key, 'unidade', e.target.value)}
         className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
-
       <input type="number" min="0" step="0.01" value={item.quantidade}
         onChange={e => onChange(item._key, 'quantidade', e.target.value)}
         className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
-
       <input type="number" min="0" step="0.01" placeholder="0,00" value={item.valor_unitario}
         onChange={e => onChange(item._key, 'valor_unitario', e.target.value)}
         className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
-
-      <div className="text-sm font-semibold text-gray-700 text-right pr-1">{fmt(sub)}</div>
-
+      <div className="text-sm font-semibold text-gray-700 text-right pr-1">{fmt(calcSub(item))}</div>
       <button onClick={() => onRemove(item._key)}
         className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-all">
         <Trash2 size={14} />
@@ -239,19 +237,23 @@ function ItemRow({ item, onChange, onRemove }:
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// ── NOVO ORÇAMENTO MODAL ──────────────────────────────────────────────────────
+// ── FORMULÁRIO (Novo + Editar) ────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
-interface NovoOrcamentoModalProps {
+interface OrcamentoFormProps {
   clientes: Cliente[]
   onClose: () => void
   onSaved: () => void
+  orcamentoEdit?: Orcamento | null
 }
-function NovoOrcamentoModal({ clientes, onClose, onSaved }: NovoOrcamentoModalProps) {
-  const [titulo, setTitulo] = useState('')
-  const [clienteId, setClienteId] = useState('')
-  const [descricao, setDescricao] = useState('')
-  const [condicoesPagamento, setCondicoesPagamento] = useState('')
-  const [observacoes, setObservacoes] = useState('')
+
+function OrcamentoForm({ clientes, onClose, onSaved, orcamentoEdit }: OrcamentoFormProps) {
+  const editando = !!orcamentoEdit
+
+  const [titulo, setTitulo] = useState(orcamentoEdit?.titulo || '')
+  const [clienteId, setClienteId] = useState(orcamentoEdit?.cliente ? String(orcamentoEdit.cliente) : '')
+  const [descricao, setDescricao] = useState(orcamentoEdit?.descricao || '')
+  const [condicoesPagamento, setCondicoesPagamento] = useState(orcamentoEdit?.condicoes_pagamento || '')
+  const [observacoes, setObservacoes] = useState(orcamentoEdit?.observacoes || '')
   const [validade, setValidade] = useState('')
   const [materiais, setMateriais] = useState<ItemForm[]>([newItem('material')])
   const [maoDeObra, setMaoDeObra] = useState<ItemForm[]>([newItem('mao_de_obra')])
@@ -261,14 +263,28 @@ function NovoOrcamentoModal({ clientes, onClose, onSaved }: NovoOrcamentoModalPr
   const [salvando, setSalvando] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [loadingItens, setLoadingItens] = useState(editando)
 
   const overlayRef = useRef<HTMLDivElement>(null)
 
+  useEffect(() => {
+    if (!editando || !orcamentoEdit) return
+    api.get(`/api/itens/?orcamento=${orcamentoEdit.id}`)
+      .then(r => {
+        const itens: Item[] = r.data
+        const mats = itens.filter(i => i.tipo === 'material').map(i => ({ ...i, _key: uid() }))
+        const maos = itens.filter(i => i.tipo === 'mao_de_obra').map(i => ({ ...i, _key: uid() }))
+        setMateriais(mats.length > 0 ? mats : [newItem('material')])
+        setMaoDeObra(maos.length > 0 ? maos : [newItem('mao_de_obra')])
+      })
+      .finally(() => setLoadingItens(false))
+  }, [])
+
   const hasContent = titulo || materiais.some(i => i.descricao) || maoDeObra.some(i => i.descricao)
   const handleClose = useCallback(() => {
-    if (hasContent) setShowCancelConfirm(true)
+    if (hasContent && !editando) setShowCancelConfirm(true)
     else onClose()
-  }, [hasContent, onClose])
+  }, [hasContent, editando, onClose])
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose() }
@@ -298,35 +314,23 @@ function NovoOrcamentoModal({ clientes, onClose, onSaved }: NovoOrcamentoModalPr
   const totalMao = maoDeObra.reduce((s, i) => s + calcSub(i), 0)
   const totalGeral = totalMat + totalMao
 
-  // ── IA — agora recebe JSON estruturado ─────────────────────────────────────
   const gerarIA = async () => {
     if (!iaPrompt.trim()) return
     setIaLoading(true)
     setIaObservacao('')
     try {
-      const resp = await fetch('http://localhost:8000/ia/gerar/', {
+      const resp = await fetch(`${API_URL}/ia/gerar/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ descricao: iaPrompt }),
       })
       const data: IAResponse = await resp.json()
-
-      if (data.materiais && data.materiais.length > 0) {
-        setMateriais(data.materiais.map(i => iaItemToForm(i, 'material')))
-      }
-
-      if (data.mao_de_obra && data.mao_de_obra.length > 0) {
-        setMaoDeObra(data.mao_de_obra.map(i => iaItemToForm(i, 'mao_de_obra')))
-      }
-
-      if (data.observacao) {
-        setIaObservacao(data.observacao)
-      }
-
+      if (data.materiais?.length > 0) setMateriais(data.materiais.map(i => iaItemToForm(i, 'material')))
+      if (data.mao_de_obra?.length > 0) setMaoDeObra(data.mao_de_obra.map(i => iaItemToForm(i, 'mao_de_obra')))
+      if (data.observacao) setIaObservacao(data.observacao)
       if (!titulo && iaPrompt.length < 80) setTitulo(iaPrompt)
-    } catch (e) {
-      console.error('Erro IA', e)
-      setIaObservacao('Erro ao conectar com a IA. Verifique se o servidor está rodando.')
+    } catch {
+      setIaObservacao('Erro ao conectar com a IA.')
     } finally {
       setIaLoading(false)
     }
@@ -347,10 +351,23 @@ function NovoOrcamentoModal({ clientes, onClose, onSaved }: NovoOrcamentoModalPr
         descricao,
         condicoes_pagamento: condicoesPagamento,
         observacoes,
-        status: 'rascunho',
-        validade_dias: validade ? Math.ceil((new Date(validade).getTime() - Date.now()) / 86400000) : 15,
+        status: orcamentoEdit?.status || 'rascunho',
+        validade_dias: validade
+          ? Math.ceil((new Date(validade).getTime() - Date.now()) / 86400000)
+          : (orcamentoEdit?.validade_dias || 15),
       }
-      const { data: orc } = await api.post('/api/orcamentos/', payload)
+
+      let orcId: number
+
+      if (editando && orcamentoEdit) {
+        await api.patch(`/api/orcamentos/${orcamentoEdit.id}/`, payload)
+        orcId = orcamentoEdit.id
+        const itensAntigos = await api.get(`/api/itens/?orcamento=${orcId}`)
+        await Promise.all(itensAntigos.data.map((i: Item) => api.delete(`/api/itens/${i.id}/`)))
+      } else {
+        const { data: orc } = await api.post('/api/orcamentos/', payload)
+        orcId = orc.id
+      }
 
       const todosItens = [
         ...materiais.filter(i => i.descricao.trim()),
@@ -358,7 +375,7 @@ function NovoOrcamentoModal({ clientes, onClose, onSaved }: NovoOrcamentoModalPr
       ]
       await Promise.all(todosItens.map(item =>
         api.post('/api/itens/', {
-          orcamento: orc.id,
+          orcamento: orcId,
           tipo: item.tipo,
           descricao: item.descricao,
           unidade: item.unidade,
@@ -382,172 +399,167 @@ function NovoOrcamentoModal({ clientes, onClose, onSaved }: NovoOrcamentoModalPr
 
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10">
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Novo Orçamento</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Preencha os dados do orçamento</p>
+              <h2 className="text-lg font-bold text-gray-900">
+                {editando ? 'Editar Orçamento' : 'Novo Orçamento'}
+              </h2>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {editando ? `Editando #${orcamentoEdit?.id}` : 'Preencha os dados do orçamento'}
+              </p>
             </div>
             <button onClick={handleClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all">
               <X size={18} />
             </button>
           </div>
 
-          <div className="px-6 py-5 space-y-6">
+          {loadingItens ? (
+            <div className="flex items-center justify-center py-16 text-gray-400">
+              <Loader2 size={20} className="animate-spin mr-2" /> Carregando itens...
+            </div>
+          ) : (
+            <div className="px-6 py-5 space-y-6">
 
-            {/* Bloco 1: Cliente */}
-            <section className="bg-gray-50 rounded-2xl p-4">
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Cliente</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 mb-1.5 block">
-                    Selecionar Cliente <span className="text-red-500">*</span>
-                  </label>
-                  <select value={clienteId} onChange={e => { setClienteId(e.target.value); setErrors(p => ({ ...p, cliente: '' })) }}
-                    className={`w-full px-3 py-2.5 border rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 cursor-pointer
-                      ${errors.cliente ? 'border-red-400' : 'border-gray-200'}`}>
-                    <option value="">Escolha um cliente</option>
-                    {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                  </select>
-                  {errors.cliente && <p className="text-xs text-red-500 mt-1">{errors.cliente}</p>}
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 mb-1.5 block">
-                    Título do Orçamento <span className="text-red-500">*</span>
-                  </label>
-                  <input type="text" placeholder="Ex: Reforma de banheiro" value={titulo}
-                    onChange={e => { setTitulo(e.target.value); setErrors(p => ({ ...p, titulo: '' })) }}
-                    className={`w-full px-3 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500
-                      ${errors.titulo ? 'border-red-400' : 'border-gray-200'}`} />
-                  {errors.titulo && <p className="text-xs text-red-500 mt-1">{errors.titulo}</p>}
-                </div>
-              </div>
-            </section>
-
-            {/* Bloco 2: IA */}
-            <section className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-4">
-              <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-1 flex items-center gap-1.5">
-                <Sparkles size={12} /> Assistente IA de Orçamento
-              </p>
-              <p className="text-xs text-blue-500/80 mb-3">Descreva o serviço — a IA monta o orçamento com materiais, mão de obra e preços de referência.</p>
-              <textarea
-                rows={2}
-                placeholder='Ex: "Reforma de banheiro 4m², troca de piso porcelanato, reboco e pintura, instalação de box blindex"'
-                value={iaPrompt}
-                onChange={e => setIaPrompt(e.target.value)}
-                className="w-full px-3 py-2.5 border border-blue-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none mb-3"
-              />
-              <button onClick={gerarIA} disabled={iaLoading || !iaPrompt.trim()}
-                className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl text-sm font-semibold transition-all">
-                {iaLoading ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-                {iaLoading ? 'Gerando orçamento com IA...' : 'Gerar Orçamento com IA'}
-              </button>
-
-              {/* Observação da IA */}
-              {iaObservacao && (
-                <div className="mt-3 flex items-start gap-2.5 bg-white/70 border border-blue-200 rounded-xl px-3.5 py-3">
-                  <Info size={14} className="text-blue-500 mt-0.5 flex-shrink-0" />
+              <section className="bg-gray-50 rounded-2xl p-4">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Cliente</p>
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-xs font-bold text-blue-700 mb-0.5">Observações da IA</p>
-                    <p className="text-xs text-blue-800/80 leading-relaxed">{iaObservacao}</p>
+                    <label className="text-xs font-semibold text-gray-500 mb-1.5 block">
+                      Selecionar Cliente <span className="text-red-500">*</span>
+                    </label>
+                    <select value={clienteId} onChange={e => { setClienteId(e.target.value); setErrors(p => ({ ...p, cliente: '' })) }}
+                      className={`w-full px-3 py-2.5 border rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 cursor-pointer
+                        ${errors.cliente ? 'border-red-400' : 'border-gray-200'}`}>
+                      <option value="">Escolha um cliente</option>
+                      {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    </select>
+                    {errors.cliente && <p className="text-xs text-red-500 mt-1">{errors.cliente}</p>}
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 mb-1.5 block">
+                      Título do Orçamento <span className="text-red-500">*</span>
+                    </label>
+                    <input type="text" placeholder="Ex: Reforma de banheiro" value={titulo}
+                      onChange={e => { setTitulo(e.target.value); setErrors(p => ({ ...p, titulo: '' })) }}
+                      className={`w-full px-3 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500
+                        ${errors.titulo ? 'border-red-400' : 'border-gray-200'}`} />
+                    {errors.titulo && <p className="text-xs text-red-500 mt-1">{errors.titulo}</p>}
                   </div>
                 </div>
-              )}
-            </section>
+              </section>
 
-            {/* Bloco 3: Descrição */}
-            <section>
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Descrição do Serviço</p>
-              <textarea rows={2} placeholder="Descreva detalhadamente o serviço a ser realizado..."
-                value={descricao} onChange={e => setDescricao(e.target.value)}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
-            </section>
-
-            {/* Bloco 4: Itens */}
-            <section>
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Itens do Orçamento</p>
-
-              <div className="grid grid-cols-[1fr_90px_80px_110px_90px_32px] gap-2 mb-2 px-1">
-                {['Descrição', 'Unidade', 'Qtd.', 'Valor Unit.', 'Total', ''].map(h => (
-                  <div key={h} className="text-xs font-bold text-gray-400 uppercase tracking-wide">{h}</div>
-                ))}
-              </div>
-
-              {/* Materiais */}
-              <div className="mb-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Package size={13} className="text-blue-500" />
-                  <span className="text-xs font-bold text-blue-600 uppercase tracking-wide">Materiais / Itens</span>
-                </div>
-                <div className="space-y-2">
-                  {materiais.map(item => (
-                    <ItemRow key={item._key} item={item}
-                      onChange={changeItem(materiais, setMateriais)}
-                      onRemove={k => removeItem('material', k)} />
-                  ))}
-                </div>
-                <button onClick={() => addItem('material')}
-                  className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-1.5 rounded-lg hover:bg-blue-50 transition-all">
-                  <Plus size={13} /> Adicionar material
+              <section className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-4">
+                <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                  <Sparkles size={12} /> Assistente IA de Orçamento
+                </p>
+                <p className="text-xs text-blue-500/80 mb-3">Descreva o serviço — a IA monta o orçamento com materiais, mão de obra e preços de referência.</p>
+                <textarea rows={2} placeholder='Ex: "Reforma de banheiro 4m², troca de piso porcelanato..."'
+                  value={iaPrompt} onChange={e => setIaPrompt(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-blue-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none mb-3" />
+                <button onClick={gerarIA} disabled={iaLoading || !iaPrompt.trim()}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl text-sm font-semibold transition-all">
+                  {iaLoading ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+                  {iaLoading ? 'Gerando orçamento com IA...' : 'Gerar Orçamento com IA'}
                 </button>
-                <div className="text-xs text-gray-500 text-right mt-1">
-                  Subtotal Materiais: <span className="font-semibold text-gray-700">{fmt(totalMat)}</span>
-                </div>
-              </div>
+                {iaObservacao && (
+                  <div className="mt-3 flex items-start gap-2.5 bg-white/70 border border-blue-200 rounded-xl px-3.5 py-3">
+                    <Info size={14} className="text-blue-500 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-xs font-bold text-blue-700 mb-0.5">Observações da IA</p>
+                      <p className="text-xs text-blue-800/80 leading-relaxed">{iaObservacao}</p>
+                    </div>
+                  </div>
+                )}
+              </section>
 
-              {/* Mão de Obra */}
-              <div className="border-t border-gray-100 pt-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Hammer size={13} className="text-orange-500" />
-                  <span className="text-xs font-bold text-orange-600 uppercase tracking-wide">Mão de Obra</span>
-                </div>
-                <div className="space-y-2">
-                  {maoDeObra.map(item => (
-                    <ItemRow key={item._key} item={item}
-                      onChange={changeItem(maoDeObra, setMaoDeObra)}
-                      onRemove={k => removeItem('mao_de_obra', k)} />
-                  ))}
-                </div>
-                <button onClick={() => addItem('mao_de_obra')}
-                  className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-orange-600 hover:text-orange-700 px-2 py-1.5 rounded-lg hover:bg-orange-50 transition-all">
-                  <Plus size={13} /> Adicionar mão de obra
-                </button>
-                <div className="text-xs text-gray-500 text-right mt-1">
-                  Subtotal Mão de Obra: <span className="font-semibold text-gray-700">{fmt(totalMao)}</span>
-                </div>
-              </div>
-
-              {/* Total Geral */}
-              <div className="flex justify-end mt-4">
-                <div className="bg-gray-900 text-white rounded-xl px-5 py-3 flex items-center gap-4">
-                  <span className="text-sm font-semibold opacity-80">Total Geral</span>
-                  <span className="text-xl font-bold text-blue-300">{fmt(totalGeral)}</span>
-                </div>
-              </div>
-            </section>
-
-            {/* Bloco 5: Detalhes */}
-            <section className="bg-gray-50 rounded-2xl p-4">
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Detalhes</p>
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Validade do Orçamento</label>
-                  <input type="date" value={validade} onChange={e => setValidade(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Condições de Pagamento</label>
-                  <input type="text" placeholder="Ex: 50% no ato, 50% na entrega..." value={condicoesPagamento}
-                    onChange={e => setCondicoesPagamento(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Observações</label>
-                <textarea rows={2} placeholder="Informações adicionais..." value={observacoes}
-                  onChange={e => setObservacoes(e.target.value)}
+              <section>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Descrição do Serviço</p>
+                <textarea rows={2} placeholder="Descreva detalhadamente o serviço..."
+                  value={descricao} onChange={e => setDescricao(e.target.value)}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
-              </div>
-            </section>
+              </section>
 
-          </div>
+              <section>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Itens do Orçamento</p>
+                <div className="grid grid-cols-[1fr_90px_80px_110px_90px_32px] gap-2 mb-2 px-1">
+                  {['Descrição', 'Unidade', 'Qtd.', 'Valor Unit.', 'Total', ''].map(h => (
+                    <div key={h} className="text-xs font-bold text-gray-400 uppercase tracking-wide">{h}</div>
+                  ))}
+                </div>
+
+                <div className="mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Package size={13} className="text-blue-500" />
+                    <span className="text-xs font-bold text-blue-600 uppercase tracking-wide">Materiais / Itens</span>
+                  </div>
+                  <div className="space-y-2">
+                    {materiais.map(item => (
+                      <ItemRow key={item._key} item={item}
+                        onChange={changeItem(materiais, setMateriais)}
+                        onRemove={k => removeItem('material', k)} />
+                    ))}
+                  </div>
+                  <button onClick={() => addItem('material')}
+                    className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-1.5 rounded-lg hover:bg-blue-50 transition-all">
+                    <Plus size={13} /> Adicionar material
+                  </button>
+                  <div className="text-xs text-gray-500 text-right mt-1">
+                    Subtotal Materiais: <span className="font-semibold text-gray-700">{fmt(totalMat)}</span>
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-100 pt-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Hammer size={13} className="text-orange-500" />
+                    <span className="text-xs font-bold text-orange-600 uppercase tracking-wide">Mão de Obra</span>
+                  </div>
+                  <div className="space-y-2">
+                    {maoDeObra.map(item => (
+                      <ItemRow key={item._key} item={item}
+                        onChange={changeItem(maoDeObra, setMaoDeObra)}
+                        onRemove={k => removeItem('mao_de_obra', k)} />
+                    ))}
+                  </div>
+                  <button onClick={() => addItem('mao_de_obra')}
+                    className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-orange-600 hover:text-orange-700 px-2 py-1.5 rounded-lg hover:bg-orange-50 transition-all">
+                    <Plus size={13} /> Adicionar mão de obra
+                  </button>
+                  <div className="text-xs text-gray-500 text-right mt-1">
+                    Subtotal Mão de Obra: <span className="font-semibold text-gray-700">{fmt(totalMao)}</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-end mt-4">
+                  <div className="bg-gray-900 text-white rounded-xl px-5 py-3 flex items-center gap-4">
+                    <span className="text-sm font-semibold opacity-80">Total Geral</span>
+                    <span className="text-xl font-bold text-blue-300">{fmt(totalGeral)}</span>
+                  </div>
+                </div>
+              </section>
+
+              <section className="bg-gray-50 rounded-2xl p-4">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Detalhes</p>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Validade do Orçamento</label>
+                    <input type="date" value={validade} onChange={e => setValidade(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Condições de Pagamento</label>
+                    <input type="text" placeholder="Ex: 50% no ato, 50% na entrega..." value={condicoesPagamento}
+                      onChange={e => setCondicoesPagamento(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Observações</label>
+                  <textarea rows={2} placeholder="Informações adicionais..." value={observacoes}
+                    onChange={e => setObservacoes(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
+                </div>
+              </section>
+
+            </div>
+          )}
 
           <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white rounded-b-2xl">
             <button onClick={handleClose}
@@ -557,7 +569,7 @@ function NovoOrcamentoModal({ clientes, onClose, onSaved }: NovoOrcamentoModalPr
             <button onClick={salvar} disabled={salvando}
               className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl text-sm font-semibold transition-all shadow-sm">
               {salvando && <Loader2 size={14} className="animate-spin" />}
-              {salvando ? 'Salvando...' : 'Criar Orçamento'}
+              {salvando ? 'Salvando...' : editando ? 'Salvar Alterações' : 'Criar Orçamento'}
             </button>
           </div>
         </div>
@@ -566,7 +578,7 @@ function NovoOrcamentoModal({ clientes, onClose, onSaved }: NovoOrcamentoModalPr
       {showCancelConfirm && (
         <ConfirmModal
           msg="Deseja cancelar o orçamento?"
-          sub="Todos os dados preenchidos serão perdidos. Orçamentos cancelados não são salvos como rascunho."
+          sub="Todos os dados preenchidos serão perdidos."
           onConfirm={() => { setShowCancelConfirm(false); onClose() }}
           onCancel={() => setShowCancelConfirm(false)}
         />
@@ -578,7 +590,7 @@ function NovoOrcamentoModal({ clientes, onClose, onSaved }: NovoOrcamentoModalPr
 // ══════════════════════════════════════════════════════════════════════════════
 // ── DETALHE ORÇAMENTO ─────────────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
-function DetalheOrcamento({ orc, onBack }: { orc: Orcamento; onBack: () => void; onUpdate: () => void }) {
+function DetalheOrcamento({ orc, onBack, onEdit }: { orc: Orcamento; onBack: () => void; onUpdate: () => void; onEdit: () => void }) {
   const [itens, setItens] = useState<Item[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -588,9 +600,9 @@ function DetalheOrcamento({ orc, onBack }: { orc: Orcamento; onBack: () => void;
       .finally(() => setLoading(false))
   }, [orc.id])
 
-const gerarPDF = () => {
-  window.open(`https://construlist.up.railway.app/api/orcamentos/${orc.id}/gerar_pdf/`, '_blank')
-}
+  const gerarPDF = () => {
+    window.open(`${API_URL}/api/orcamentos/${orc.id}/gerar_pdf/`, '_blank')
+  }
 
   const materiais = itens.filter(i => i.tipo === 'material')
   const maoDeObra = itens.filter(i => i.tipo === 'mao_de_obra')
@@ -610,10 +622,16 @@ const gerarPDF = () => {
           <h1 className="text-2xl font-bold text-gray-900">{orc.titulo}</h1>
           <p className="text-sm text-gray-500 mt-0.5">{orc.cliente_nome}</p>
         </div>
-        <button onClick={gerarPDF}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm">
-          <FileText size={15} /> Gerar PDF
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={onEdit}
+            className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-semibold transition-all">
+            <Pencil size={15} /> Editar
+          </button>
+          <button onClick={gerarPDF}
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm">
+            <FileText size={15} /> Gerar PDF
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -706,6 +724,7 @@ export default function Orcamentos() {
   const [busca, setBusca] = useState('')
   const [showNovo, setShowNovo] = useState(false)
   const [detalhe, setDetalhe] = useState<Orcamento | null>(null)
+  const [editando, setEditando] = useState<Orcamento | null>(null)
   const [menu, setMenu] = useState<number | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -746,7 +765,7 @@ export default function Orcamentos() {
   }
 
   const gerarPDF = (id: number) => {
-    window.open(`http://localhost:8000/api/orcamentos/${id}/gerar_pdf/`, '_blank')
+    window.open(`${API_URL}/api/orcamentos/${id}/gerar_pdf/`, '_blank')
     setMenu(null)
   }
 
@@ -755,8 +774,26 @@ export default function Orcamentos() {
     o.cliente_nome?.toLowerCase().includes(busca.toLowerCase())
   )
 
+  if (editando) {
+    return (
+      <OrcamentoForm
+        clientes={clientes}
+        onClose={() => setEditando(null)}
+        onSaved={() => { setEditando(null); setDetalhe(null); fetchAll() }}
+        orcamentoEdit={editando}
+      />
+    )
+  }
+
   if (detalhe) {
-    return <DetalheOrcamento orc={detalhe} onBack={() => setDetalhe(null)} onUpdate={fetchAll} />
+    return (
+      <DetalheOrcamento
+        orc={detalhe}
+        onBack={() => setDetalhe(null)}
+        onUpdate={fetchAll}
+        onEdit={() => setEditando(detalhe)}
+      />
+    )
   }
 
   return (
@@ -795,69 +832,60 @@ export default function Orcamentos() {
           {filtrados.map(orc => (
             <div key={orc.id}
               className="bg-white rounded-2xl border border-gray-100 px-5 py-4 hover:shadow-md transition-all flex items-center gap-4 group">
-
               <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 flex-shrink-0">
                 #{orc.id}
               </div>
-
               <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setDetalhe(orc)}>
                 <p className="font-semibold text-gray-900 truncate">{orc.titulo}</p>
                 <p className="text-xs text-gray-400 mt-0.5">
                   {orc.cliente_nome} · {new Date(orc.criado_em).toLocaleDateString('pt-BR')}
                 </p>
               </div>
-
               <div className="flex items-center gap-3 flex-shrink-0">
                 <StatusBadge status={orc.status} />
                 <span className="text-sm font-bold text-gray-800 min-w-[80px] text-right">
                   {fmt(orc.total_geral)}
                 </span>
-
                 <div className="relative" ref={menu === orc.id ? menuRef : undefined}>
                   <button
                     onClick={e => { e.stopPropagation(); setMenu(menu === orc.id ? null : orc.id) }}
                     className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all">
                     <MoreVertical size={16} />
                   </button>
-
                   {menu === orc.id && (
                     <div className="absolute right-0 top-full mt-1 bg-white border border-gray-100 rounded-2xl shadow-xl z-20 py-1.5 w-52 overflow-hidden">
-
                       <button onClick={() => { setDetalhe(orc); setMenu(null) }}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
                         <Eye size={15} className="text-gray-400" /> Ver detalhes
                       </button>
-
+                      <button onClick={() => { setEditando(orc); setMenu(null) }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                        <Pencil size={15} className="text-gray-400" /> Editar
+                      </button>
                       <div className="h-px bg-gray-100 mx-3 my-1" />
-
                       {orc.status !== 'enviado' && orc.status !== 'aprovado' && (
                         <button onClick={() => changeStatus(orc.id, 'enviado')}
                           className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-amber-700 hover:bg-amber-50 transition-colors">
                           <Send size={15} className="text-amber-500" /> Marcar como Enviado
                         </button>
                       )}
-
                       {orc.status !== 'aprovado' && (
                         <button onClick={() => changeStatus(orc.id, 'aprovado')}
                           className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-green-700 hover:bg-green-50 transition-colors">
                           <CheckCircle size={15} className="text-green-500" /> Aprovar
                         </button>
                       )}
-
                       {orc.status !== 'recusado' && (
                         <button onClick={() => changeStatus(orc.id, 'recusado')}
                           className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-700 hover:bg-red-50 transition-colors">
                           <XCircle size={15} className="text-red-500" /> Recusar
                         </button>
                       )}
-
-                      <button onClick={() => { gerarPDF(orc.id) }}
+                      <button onClick={() => gerarPDF(orc.id)}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-blue-700 hover:bg-blue-50 transition-colors">
                         <FileText size={15} className="text-blue-500" /> Gerar PDF
                       </button>
-
                       <div className="h-px bg-gray-100 mx-3 my-1" />
-
                       <button onClick={() => { setConfirmDelete(orc.id); setMenu(null) }}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors">
                         <Trash2 size={15} className="text-red-500" /> Excluir
@@ -872,7 +900,7 @@ export default function Orcamentos() {
       )}
 
       {showNovo && (
-        <NovoOrcamentoModal
+        <OrcamentoForm
           clientes={clientes}
           onClose={() => setShowNovo(false)}
           onSaved={() => { setShowNovo(false); fetchAll() }}

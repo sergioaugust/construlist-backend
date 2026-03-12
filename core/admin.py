@@ -6,7 +6,7 @@ from .models import Cliente, Orcamento, ItemOrcamento
 
 class ItemOrcamentoInline(admin.TabularInline):
     model = ItemOrcamento
-    extra = 1
+    extra = 1 #Mostra uma linha vazia automática para criar item
 
 
 @admin.register(Orcamento)
