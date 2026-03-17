@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Loader2, Eye, EyeOff, HardHat, ArrowLeft, CheckCircle2 } from 'lucide-react'
+import { Loader2, Eye, EyeOff, HardHat, ArrowLeft, CheckCircle2, UserPlus } from 'lucide-react'
 
 interface LoginProps {
   onLogin: (token: string) => void
@@ -17,14 +17,12 @@ export default function Login({ onLogin }: LoginProps) {
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
 
-  // Cadastro
   const [regNome,  setRegNome]  = useState('')
   const [regEmail, setRegEmail] = useState('')
   const [regPass,  setRegPass]  = useState('')
   const [regPass2, setRegPass2] = useState('')
   const [showReg,  setShowReg]  = useState(false)
 
-  // Recuperar senha
   const [forgotEmail,  setForgotEmail]  = useState('')
   const [forgotCode,   setForgotCode]   = useState('')
   const [newPassword,  setNewPassword]  = useState('')
@@ -37,7 +35,6 @@ export default function Login({ onLogin }: LoginProps) {
     setTimeout(() => setPopupMsg(''), 4000)
   }
 
-  // ── LOGIN ────────────────────────────────────────────────────────────────
   const handleLogin = async () => {
     setError('')
     if (!username || !password) { setError('Preencha usuário e senha.'); return }
@@ -62,32 +59,24 @@ export default function Login({ onLogin }: LoginProps) {
     }
   }
 
-  // ── CADASTRO ─────────────────────────────────────────────────────────────
   const handleRegister = async () => {
     setError('')
-    if (!regNome.trim())  { setError('Informe seu nome.'); return }
-    if (!regEmail.trim()) { setError('Informe seu e-mail.'); return }
-    if (!regPass)         { setError('Informe uma senha.'); return }
-    if (regPass.length < 6) { setError('A senha precisa ter pelo menos 6 caracteres.'); return }
-    if (regPass !== regPass2) { setError('As senhas não coincidem.'); return }
+    if (!regNome.trim())        { setError('Informe seu nome.'); return }
+    if (!regEmail.trim())       { setError('Informe seu e-mail.'); return }
+    if (!regPass)               { setError('Informe uma senha.'); return }
+    if (regPass.length < 6)     { setError('A senha precisa ter pelo menos 6 caracteres.'); return }
+    if (regPass !== regPass2)   { setError('As senhas não coincidem.'); return }
 
     setLoading(true)
     try {
-      // Usa o primeiro nome como username (sem espaços, minúsculo)
       const usernameGerado = regNome.trim().toLowerCase().split(' ')[0] + Math.floor(Math.random() * 900 + 100)
-
       const res = await fetch(`${API}/api/register/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: usernameGerado,
-          email: regEmail,
-          password: regPass,
-        }),
+        body: JSON.stringify({ username: usernameGerado, email: regEmail, password: regPass }),
       })
       const data = await res.json()
       if (res.ok) {
-        // Login automático após cadastro
         const loginRes = await fetch(`${API}/api/login/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -96,7 +85,7 @@ export default function Login({ onLogin }: LoginProps) {
         const loginData = await loginRes.json()
         if (loginRes.ok && loginData.access) {
           localStorage.setItem('token', loginData.access)
-          localStorage.setItem('primeiro_acesso', 'true') // marca para mostrar guia
+          localStorage.setItem('primeiro_acesso', 'true')
           onLogin(loginData.access)
         }
       } else {
@@ -109,7 +98,6 @@ export default function Login({ onLogin }: LoginProps) {
     }
   }
 
-  // ── RECUPERAR SENHA ──────────────────────────────────────────────────────
   const handleSendCode = async () => {
     setError('')
     if (!forgotEmail) { setError('Digite seu e-mail.'); return }
@@ -120,12 +108,8 @@ export default function Login({ onLogin }: LoginProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: forgotEmail }),
       })
-      if (res.ok) {
-        showPopup('✅ Código enviado! Verifique seu e-mail.')
-        setStep('forgot_code')
-      } else {
-        setError('E-mail não encontrado no sistema.')
-      }
+      if (res.ok) { showPopup('✅ Código enviado! Verifique seu e-mail.'); setStep('forgot_code') }
+      else { setError('E-mail não encontrado no sistema.') }
     } catch {
       setError('Erro ao enviar. Tente novamente.')
     } finally {
@@ -179,27 +163,27 @@ export default function Login({ onLogin }: LoginProps) {
   }
 
   const goRegister = () => {
-    setStep('register')
-    setError('')
+    setStep('register'); setError('')
     setRegNome(''); setRegEmail(''); setRegPass(''); setRegPass2('')
   }
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
+  const inputCls = "w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
 
-      {/* Popup */}
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-100 px-4 py-8">
+
       {popupMsg && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-lg">
           {popupMsg}
         </div>
       )}
 
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+      <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
 
         {/* Cabeçalho */}
         <div className="bg-blue-600 px-8 py-7 text-center">
           <div className="flex items-center justify-center gap-2 mb-1">
-            <HardHat size={24} className="text-white" strokeWidth={2.5} />
+            <HardHat size={26} className="text-white" strokeWidth={2.5} />
             <span className="text-2xl font-black text-white tracking-tight">CONSTRULIST</span>
           </div>
           <p className="text-blue-100 text-sm">Sistema de Orçamentos</p>
@@ -219,7 +203,7 @@ export default function Login({ onLogin }: LoginProps) {
                 <input type="text" placeholder="seu_usuario" value={username}
                   onChange={e => setUsername(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+                  className={inputCls} />
               </div>
 
               <div>
@@ -228,7 +212,7 @@ export default function Login({ onLogin }: LoginProps) {
                   <input type={showPass ? 'text' : 'password'} placeholder="••••••••" value={password}
                     onChange={e => setPassword(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                    className="w-full px-3.5 py-2.5 pr-10 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+                    className={inputCls + ' pr-10'} />
                   <button type="button" onClick={() => setShowPass(p => !p)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                     {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -237,21 +221,27 @@ export default function Login({ onLogin }: LoginProps) {
               </div>
 
               <button onClick={handleLogin} disabled={loading}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-bold rounded-xl transition-colors shadow-sm">
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-bold rounded-xl transition-colors shadow-sm">
                 {loading
                   ? <span className="flex items-center justify-center gap-2"><Loader2 size={15} className="animate-spin" />Aguarde...</span>
                   : 'ENTRAR'}
               </button>
 
-              {/* Link cadastro */}
-              <p className="text-center text-xs text-gray-400">
-                Não tem uma conta?{' '}
-                <button onClick={goRegister} className="text-blue-600 font-semibold hover:underline">
-                  Cadastre-se agora
-                </button>
-              </p>
+              {/* Divisor visual */}
+              <div className="flex items-center gap-3 py-1">
+                <div className="flex-1 h-px bg-gray-200" />
+                <span className="text-xs text-gray-400 font-medium">ou</span>
+                <div className="flex-1 h-px bg-gray-200" />
+              </div>
 
-              <div className="text-center pt-1">
+              {/* Botão cadastro — DESTACADO */}
+              <button onClick={goRegister}
+                className="w-full py-3 bg-green-500 hover:bg-green-600 text-white text-sm font-bold rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2">
+                <UserPlus size={16} />
+                CRIAR CONTA GRÁTIS
+              </button>
+
+              <div className="text-center">
                 <button onClick={() => { setStep('forgot_email'); setError('') }}
                   className="text-xs text-gray-400 hover:text-blue-600 transition-colors">
                   🔒 Esqueceu sua senha?
@@ -269,7 +259,7 @@ export default function Login({ onLogin }: LoginProps) {
               </button>
 
               <div>
-                <p className="text-sm font-bold text-gray-800 mb-1">Criar sua conta</p>
+                <p className="text-base font-bold text-gray-800 mb-0.5">Criar sua conta</p>
                 <p className="text-xs text-gray-400">Gratuito para começar. Sem cartão de crédito.</p>
               </div>
 
@@ -278,23 +268,20 @@ export default function Login({ onLogin }: LoginProps) {
               <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-1.5">Seu nome</label>
                 <input type="text" placeholder="João Silva" value={regNome}
-                  onChange={e => setRegNome(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+                  onChange={e => setRegNome(e.target.value)} className={inputCls} />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-1.5">E-mail</label>
                 <input type="email" placeholder="seu@email.com" value={regEmail}
-                  onChange={e => setRegEmail(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+                  onChange={e => setRegEmail(e.target.value)} className={inputCls} />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-1.5">Senha</label>
                 <div className="relative">
                   <input type={showReg ? 'text' : 'password'} placeholder="Mínimo 6 caracteres" value={regPass}
-                    onChange={e => setRegPass(e.target.value)}
-                    className="w-full px-3.5 py-2.5 pr-10 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+                    onChange={e => setRegPass(e.target.value)} className={inputCls + ' pr-10'} />
                   <button type="button" onClick={() => setShowReg(p => !p)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                     {showReg ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -307,19 +294,20 @@ export default function Login({ onLogin }: LoginProps) {
                 <input type={showReg ? 'text' : 'password'} placeholder="Repita a senha" value={regPass2}
                   onChange={e => setRegPass2(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleRegister()}
-                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+                  className={inputCls} />
               </div>
 
               <button onClick={handleRegister} disabled={loading}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-bold rounded-xl transition-colors shadow-sm">
+                className="w-full py-3 bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white text-sm font-bold rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2">
                 {loading
-                  ? <span className="flex items-center justify-center gap-2"><Loader2 size={15} className="animate-spin" />Criando conta...</span>
-                  : 'CRIAR CONTA E ENTRAR'}
+                  ? <><Loader2 size={15} className="animate-spin" />Criando conta...</>
+                  : <><UserPlus size={16} />CRIAR CONTA E ENTRAR</>}
               </button>
 
               <p className="text-center text-xs text-gray-400">
                 Já tem conta?{' '}
-                <button onClick={() => { setStep('login'); setError('') }} className="text-blue-600 font-semibold hover:underline">
+                <button onClick={() => { setStep('login'); setError('') }}
+                  className="text-blue-600 font-semibold hover:underline">
                   Fazer login
                 </button>
               </p>
@@ -342,10 +330,10 @@ export default function Login({ onLogin }: LoginProps) {
                 <input type="email" placeholder="seu@email.com" value={forgotEmail}
                   onChange={e => setForgotEmail(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSendCode()}
-                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+                  className={inputCls} />
               </div>
               <button onClick={handleSendCode} disabled={loading}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-bold rounded-xl transition-colors">
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-bold rounded-xl transition-colors">
                 {loading ? <span className="flex items-center justify-center gap-2"><Loader2 size={15} className="animate-spin" />Enviando...</span> : 'ENVIAR CÓDIGO'}
               </button>
             </div>
@@ -368,10 +356,10 @@ export default function Login({ onLogin }: LoginProps) {
                 <input type="text" placeholder="000000" maxLength={6} value={forgotCode}
                   onChange={e => setForgotCode(e.target.value.replace(/\D/g, ''))}
                   onKeyDown={e => e.key === 'Enter' && handleVerifyCode()}
-                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-center tracking-widest font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+                  className={inputCls + ' text-center tracking-widest font-bold'} />
               </div>
               <button onClick={handleVerifyCode} disabled={loading}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-bold rounded-xl transition-colors">
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-bold rounded-xl transition-colors">
                 {loading ? <span className="flex items-center justify-center gap-2"><Loader2 size={15} className="animate-spin" />Verificando...</span> : 'VERIFICAR CÓDIGO'}
               </button>
               <div className="text-center">
@@ -393,7 +381,7 @@ export default function Login({ onLogin }: LoginProps) {
                 <div className="relative">
                   <input type={showNew ? 'text' : 'password'} placeholder="••••••••" value={newPassword}
                     onChange={e => setNewPassword(e.target.value)}
-                    className="w-full px-3.5 py-2.5 pr-10 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+                    className={inputCls + ' pr-10'} />
                   <button type="button" onClick={() => setShowNew(p => !p)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
                     {showNew ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -405,10 +393,10 @@ export default function Login({ onLogin }: LoginProps) {
                 <input type={showNew ? 'text' : 'password'} placeholder="••••••••" value={newPassword2}
                   onChange={e => setNewPassword2(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleNewPassword()}
-                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+                  className={inputCls} />
               </div>
               <button onClick={handleNewPassword} disabled={loading}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-bold rounded-xl transition-colors">
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-bold rounded-xl transition-colors">
                 {loading ? <span className="flex items-center justify-center gap-2"><Loader2 size={15} className="animate-spin" />Salvando...</span> : 'SALVAR NOVA SENHA'}
               </button>
             </div>
@@ -423,7 +411,7 @@ export default function Login({ onLogin }: LoginProps) {
                 <p className="text-xs text-gray-400 mt-1">Faça login com sua nova senha.</p>
               </div>
               <button onClick={resetForgot}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl transition-colors">
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl transition-colors">
                 IR PARA O LOGIN
               </button>
             </div>
