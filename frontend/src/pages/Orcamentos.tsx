@@ -1,3 +1,5 @@
+import Guia from '../components/Guia'
+import { useLocation } from 'react-router-dom'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Plus, Search, MoreVertical, Eye, Send, CheckCircle, XCircle,
@@ -8,46 +10,20 @@ import api from '../services/api'
 
 const API_URL = 'https://construlist.up.railway.app'
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 interface Cliente { id: number; nome: string }
 interface Item {
-  id?: number
-  tipo: 'material' | 'mao_de_obra'
-  descricao: string
-  unidade: string
-  quantidade: number | string
-  valor_unitario: number | string
-  subtotal?: number
+  id?: number; tipo: 'material' | 'mao_de_obra'; descricao: string; unidade: string
+  quantidade: number | string; valor_unitario: number | string; subtotal?: number
 }
 interface ItemForm extends Item { _key: string }
 interface Orcamento {
-  id: number
-  titulo: string
-  status: string
-  cliente: number
-  cliente_nome: string
-  total_geral: number
-  criado_em: string
-  validade_dias: number
-  descricao?: string
-  condicoes_pagamento?: string
-  observacoes?: string
-  itens?: Item[]
+  id: number; titulo: string; status: string; cliente: number; cliente_nome: string
+  total_geral: number; criado_em: string; validade_dias: number
+  descricao?: string; condicoes_pagamento?: string; observacoes?: string; itens?: Item[]
 }
-interface IAItem {
-  descricao: string
-  unidade: string
-  quantidade: number
-  valor_unitario: number
-}
-interface IAResponse {
-  materiais: IAItem[]
-  mao_de_obra: IAItem[]
-  observacao?: string
-  erro?: boolean
-}
+interface IAItem { descricao: string; unidade: string; quantidade: number; valor_unitario: number }
+interface IAResponse { materiais: IAItem[]; mao_de_obra: IAItem[]; observacao?: string; erro?: boolean }
 
-// ── Sugestões ─────────────────────────────────────────────────────────────────
 const SUGESTOES_ITENS = [
   { descricao: 'Tinta Suvinil (18L)', unidade: 'lata', valor_unitario: 280, tipo: 'material' },
   { descricao: 'Tinta acrílica premium', unidade: 'L', valor_unitario: 45, tipo: 'material' },
@@ -77,12 +53,9 @@ const SUGESTOES_ITENS = [
   { descricao: 'Mão de obra — drywall', unidade: 'm²', valor_unitario: 55, tipo: 'mao_de_obra' },
 ]
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 const uid = () => Math.random().toString(36).slice(2)
-const fmt = (v: number) =>
-  'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const calcSub = (i: ItemForm) =>
-  (Number(i.quantidade) || 0) * (Number(i.valor_unitario) || 0)
+const fmt = (v: number) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const calcSub = (i: ItemForm) => (Number(i.quantidade) || 0) * (Number(i.valor_unitario) || 0)
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   rascunho: { label: 'Rascunho', color: '#6b7280', bg: '#f3f4f6' },
@@ -96,27 +69,15 @@ const newItem = (tipo: 'material' | 'mao_de_obra' = 'material'): ItemForm => ({
 })
 
 const iaItemToForm = (item: IAItem, tipo: 'material' | 'mao_de_obra'): ItemForm => ({
-  _key: uid(), tipo,
-  descricao: item.descricao || '',
-  unidade: item.unidade || 'un',
-  quantidade: Number(item.quantidade) || 1,
-  valor_unitario: Number(item.valor_unitario) || 0,
+  _key: uid(), tipo, descricao: item.descricao || '', unidade: item.unidade || 'un',
+  quantidade: Number(item.quantidade) || 1, valor_unitario: Number(item.valor_unitario) || 0,
 })
 
-// ── Helper para gerar PDF com token ──────────────────────────────────────────
 const gerarPDFComToken = (id: number) => {
   const token = localStorage.getItem('token')
-  fetch(`${API_URL}/api/orcamentos/${id}/gerar_pdf/`, {
-    headers: { Authorization: `Bearer ${token}` }
-  })
-    .then(r => {
-      if (!r.ok) throw new Error('Erro ao gerar PDF')
-      return r.blob()
-    })
-    .then(blob => {
-      const url = URL.createObjectURL(blob)
-      window.open(url, '_blank')
-    })
+  fetch(`${API_URL}/api/orcamentos/${id}/gerar_pdf/`, { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => { if (!r.ok) throw new Error('Erro'); return r.blob() })
+    .then(blob => { const url = URL.createObjectURL(blob); window.open(url, '_blank') })
     .catch(() => alert('Erro ao gerar PDF. Tente novamente.'))
 }
 
@@ -127,57 +88,35 @@ function useModal(onClose: () => void) {
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   }, [onClose])
-  const handleOverlay = (e: React.MouseEvent) => {
-    if (e.target === overlayRef.current) onClose()
-  }
-  return { overlayRef, handleOverlay }
+  return { overlayRef, handleOverlay: (e: React.MouseEvent) => { if (e.target === overlayRef.current) onClose() } }
 }
 
 function StatusBadge({ status }: { status: string }) {
   const c = STATUS_CONFIG[status] || STATUS_CONFIG.rascunho
-  return (
-    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold"
-      style={{ color: c.color, backgroundColor: c.bg }}>
-      {c.label}
-    </span>
-  )
+  return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold" style={{ color: c.color, backgroundColor: c.bg }}>{c.label}</span>
 }
 
-function ConfirmModal({ msg, sub, onConfirm, onCancel, danger = false }:
-  { msg: string; sub?: string; onConfirm: () => void; onCancel: () => void; danger?: boolean }) {
+function ConfirmModal({ msg, sub, onConfirm, onCancel, danger = false }: { msg: string; sub?: string; onConfirm: () => void; onCancel: () => void; danger?: boolean }) {
   const { overlayRef, handleOverlay } = useModal(onCancel)
   return (
-    <div ref={overlayRef} onClick={handleOverlay}
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+    <div ref={overlayRef} onClick={handleOverlay} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
         <div className="flex items-start gap-3 mb-4">
           <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${danger ? 'bg-red-100' : 'bg-amber-100'}`}>
             <AlertTriangle size={20} className={danger ? 'text-red-500' : 'text-amber-500'} />
           </div>
-          <div>
-            <p className="font-semibold text-gray-900">{msg}</p>
-            {sub && <p className="text-sm text-gray-500 mt-1">{sub}</p>}
-          </div>
+          <div><p className="font-semibold text-gray-900">{msg}</p>{sub && <p className="text-sm text-gray-500 mt-1">{sub}</p>}</div>
         </div>
         <div className="flex gap-2 justify-end">
-          <button onClick={onCancel}
-            className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-all">
-            Cancelar
-          </button>
-          <button onClick={onConfirm}
-            className={`px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all
-              ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-500 hover:bg-amber-600'}`}>
-            Confirmar
-          </button>
+          <button onClick={onCancel} className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-all">Cancelar</button>
+          <button onClick={onConfirm} className={`px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-500 hover:bg-amber-600'}`}>Confirmar</button>
         </div>
       </div>
     </div>
   )
 }
 
-// ── Item Row ──────────────────────────────────────────────────────────────────
-function ItemRow({ item, onChange, onRemove }:
-  { item: ItemForm; onChange: (k: string, f: keyof ItemForm, v: string) => void; onRemove: (k: string) => void }) {
+function ItemRow({ item, onChange, onRemove }: { item: ItemForm; onChange: (k: string, f: keyof ItemForm, v: string) => void; onRemove: (k: string) => void }) {
   const [sugs, setSugs] = useState<typeof SUGESTOES_ITENS>([])
   const [showSugs, setShowSugs] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -186,86 +125,53 @@ function ItemRow({ item, onChange, onRemove }:
     if (item.descricao.length < 2) { setSugs([]); setShowSugs(false); return }
     const q = item.descricao.toLowerCase()
     const found = SUGESTOES_ITENS.filter(s => s.descricao.toLowerCase().includes(q)).slice(0, 5)
-    setSugs(found)
-    setShowSugs(found.length > 0)
+    setSugs(found); setShowSugs(found.length > 0)
   }, [item.descricao])
 
   useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setShowSugs(false)
-    }
+    const h = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setShowSugs(false) }
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
   }, [])
 
   const pickSug = (s: typeof SUGESTOES_ITENS[0]) => {
-    onChange(item._key, 'descricao', s.descricao)
-    onChange(item._key, 'unidade', s.unidade)
-    onChange(item._key, 'valor_unitario', String(s.valor_unitario))
-    onChange(item._key, 'tipo', s.tipo as 'material' | 'mao_de_obra')
-    setSugs([])
-    setShowSugs(false)
+    onChange(item._key, 'descricao', s.descricao); onChange(item._key, 'unidade', s.unidade)
+    onChange(item._key, 'valor_unitario', String(s.valor_unitario)); onChange(item._key, 'tipo', s.tipo as 'material' | 'mao_de_obra')
+    setSugs([]); setShowSugs(false)
   }
 
   return (
     <div className="grid grid-cols-[1fr_70px_60px_100px_80px_32px] sm:grid-cols-[1fr_90px_80px_110px_90px_32px] gap-1.5 sm:gap-2 items-center">
       <div ref={wrapRef} className="relative">
-        <input
-          type="text"
-          placeholder="Descrição..."
-          value={item.descricao}
+        <input type="text" placeholder="Descrição..." value={item.descricao}
           onChange={e => onChange(item._key, 'descricao', e.target.value)}
           onFocus={() => { if (sugs.length > 0) setShowSugs(true) }}
-          className="w-full px-2 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-        />
+          className="w-full px-2 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
         {showSugs && sugs.length > 0 && (
           <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-30 overflow-hidden">
             {sugs.map(s => (
-              <button
-                key={s.descricao}
-                type="button"
-                onMouseDown={e => { e.preventDefault(); pickSug(s) }}
+              <button key={s.descricao} type="button" onMouseDown={e => { e.preventDefault(); pickSug(s) }}
                 className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex items-center justify-between gap-2 transition-colors">
                 <span className="text-gray-800 font-medium truncate">{s.descricao}</span>
-                <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
-                  {s.unidade} · {fmt(s.valor_unitario)}
-                </span>
+                <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">{s.unidade} · {fmt(s.valor_unitario)}</span>
               </button>
             ))}
           </div>
         )}
       </div>
-      <input type="text" placeholder="un" value={item.unidade}
-        onChange={e => onChange(item._key, 'unidade', e.target.value)}
-        className="px-2 py-2 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
-      <input type="number" min="0" step="0.01" value={item.quantidade}
-        onChange={e => onChange(item._key, 'quantidade', e.target.value)}
-        className="px-2 py-2 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
-      <input type="number" min="0" step="0.01" placeholder="0,00" value={item.valor_unitario}
-        onChange={e => onChange(item._key, 'valor_unitario', e.target.value)}
-        className="px-2 py-2 border border-gray-200 rounded-xl text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+      <input type="text" placeholder="un" value={item.unidade} onChange={e => onChange(item._key, 'unidade', e.target.value)} className="px-2 py-2 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+      <input type="number" min="0" step="0.01" value={item.quantidade} onChange={e => onChange(item._key, 'quantidade', e.target.value)} className="px-2 py-2 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+      <input type="number" min="0" step="0.01" placeholder="0,00" value={item.valor_unitario} onChange={e => onChange(item._key, 'valor_unitario', e.target.value)} className="px-2 py-2 border border-gray-200 rounded-xl text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
       <div className="text-sm font-semibold text-gray-700 text-right pr-1 truncate">{fmt(calcSub(item))}</div>
-      <button onClick={() => onRemove(item._key)}
-        className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-all">
-        <Trash2 size={14} />
-      </button>
+      <button onClick={() => onRemove(item._key)} className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-all"><Trash2 size={14} /></button>
     </div>
   )
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// ── FORMULÁRIO (Novo + Editar) ────────────────────────────────────────────────
-// ══════════════════════════════════════════════════════════════════════════════
-interface OrcamentoFormProps {
-  clientes: Cliente[]
-  onClose: () => void
-  onSaved: () => void
-  orcamentoEdit?: Orcamento | null
-}
+interface OrcamentoFormProps { clientes: Cliente[]; onClose: () => void; onSaved: () => void; orcamentoEdit?: Orcamento | null }
 
 function OrcamentoForm({ clientes, onClose, onSaved, orcamentoEdit }: OrcamentoFormProps) {
   const editando = !!orcamentoEdit
-
   const [titulo, setTitulo] = useState(orcamentoEdit?.titulo || '')
   const [clienteId, setClienteId] = useState(orcamentoEdit?.cliente ? String(orcamentoEdit.cliente) : '')
   const [descricao, setDescricao] = useState(orcamentoEdit?.descricao || '')
@@ -281,274 +187,141 @@ function OrcamentoForm({ clientes, onClose, onSaved, orcamentoEdit }: OrcamentoF
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [loadingItens, setLoadingItens] = useState(editando)
-
   const overlayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!editando || !orcamentoEdit) return
-    api.get(`/api/itens/?orcamento=${orcamentoEdit.id}`)
-      .then(r => {
-        const itens: Item[] = r.data
-        const mats = itens.filter(i => i.tipo === 'material').map(i => ({ ...i, _key: uid() }))
-        const maos = itens.filter(i => i.tipo === 'mao_de_obra').map(i => ({ ...i, _key: uid() }))
-        setMateriais(mats.length > 0 ? mats : [newItem('material')])
-        setMaoDeObra(maos.length > 0 ? maos : [newItem('mao_de_obra')])
-      })
-      .finally(() => setLoadingItens(false))
+    api.get(`/api/itens/?orcamento=${orcamentoEdit.id}`).then(r => {
+      const itens: Item[] = r.data
+      const mats = itens.filter(i => i.tipo === 'material').map(i => ({ ...i, _key: uid() }))
+      const maos = itens.filter(i => i.tipo === 'mao_de_obra').map(i => ({ ...i, _key: uid() }))
+      setMateriais(mats.length > 0 ? mats : [newItem('material')])
+      setMaoDeObra(maos.length > 0 ? maos : [newItem('mao_de_obra')])
+    }).finally(() => setLoadingItens(false))
   }, [])
 
   const hasContent = titulo || materiais.some(i => i.descricao) || maoDeObra.some(i => i.descricao)
-  const handleClose = useCallback(() => {
-    if (hasContent && !editando) setShowCancelConfirm(true)
-    else onClose()
-  }, [hasContent, editando, onClose])
+  const handleClose = useCallback(() => { if (hasContent && !editando) setShowCancelConfirm(true); else onClose() }, [hasContent, editando, onClose])
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose() }
-    window.addEventListener('keydown', h)
-    return () => window.removeEventListener('keydown', h)
+    window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h)
   }, [handleClose])
 
-  const handleOverlay = (e: React.MouseEvent) => {
-    if (e.target === overlayRef.current) handleClose()
-  }
-
-  const changeItem = (list: ItemForm[], setList: (v: ItemForm[]) => void) =>
-    (key: string, field: keyof ItemForm, value: string) =>
-      setList(list.map(i => i._key === key ? { ...i, [field]: value } : i))
-
-  const addItem = (tipo: 'material' | 'mao_de_obra') => {
-    if (tipo === 'material') setMateriais(p => [...p, newItem('material')])
-    else setMaoDeObra(p => [...p, newItem('mao_de_obra')])
-  }
-
-  const removeItem = (tipo: 'material' | 'mao_de_obra', key: string) => {
-    if (tipo === 'material') setMateriais(p => p.filter(i => i._key !== key))
-    else setMaoDeObra(p => p.filter(i => i._key !== key))
-  }
+  const changeItem = (list: ItemForm[], setList: (v: ItemForm[]) => void) => (key: string, field: keyof ItemForm, value: string) => setList(list.map(i => i._key === key ? { ...i, [field]: value } : i))
+  const addItem = (tipo: 'material' | 'mao_de_obra') => { if (tipo === 'material') setMateriais(p => [...p, newItem('material')]); else setMaoDeObra(p => [...p, newItem('mao_de_obra')]) }
+  const removeItem = (tipo: 'material' | 'mao_de_obra', key: string) => { if (tipo === 'material') setMateriais(p => p.filter(i => i._key !== key)); else setMaoDeObra(p => p.filter(i => i._key !== key)) }
 
   const totalMat = materiais.reduce((s, i) => s + calcSub(i), 0)
   const totalMao = maoDeObra.reduce((s, i) => s + calcSub(i), 0)
   const totalGeral = totalMat + totalMao
 
-  // ── Gerar com IA — CORRIGIDO com token ───────────────────────────────────
   const gerarIA = async () => {
     if (!iaPrompt.trim()) return
-    setIaLoading(true)
-    setIaObservacao('')
+    setIaLoading(true); setIaObservacao('')
     try {
       const token = localStorage.getItem('token')
-      const resp = await fetch(`${API_URL}/ia/gerar/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ descricao: iaPrompt }),
-      })
+      const resp = await fetch(`${API_URL}/ia/gerar/`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ descricao: iaPrompt }) })
       const data: IAResponse = await resp.json()
       if (data.materiais?.length > 0) setMateriais(data.materiais.map(i => iaItemToForm(i, 'material')))
       if (data.mao_de_obra?.length > 0) setMaoDeObra(data.mao_de_obra.map(i => iaItemToForm(i, 'mao_de_obra')))
       if (data.observacao) setIaObservacao(data.observacao)
       if (!titulo && iaPrompt.length < 80) setTitulo(iaPrompt)
-    } catch {
-      setIaObservacao('Erro ao conectar com a IA.')
-    } finally {
-      setIaLoading(false)
-    }
+    } catch { setIaObservacao('Erro ao conectar com a IA.') }
+    finally { setIaLoading(false) }
   }
 
   const salvar = async () => {
     const e: Record<string, string> = {}
     if (!titulo.trim()) e.titulo = 'Informe o título'
     if (!clienteId) e.cliente = 'Selecione um cliente'
-    setErrors(e)
-    if (Object.keys(e).length > 0) return
-
+    setErrors(e); if (Object.keys(e).length > 0) return
     setSalvando(true)
     try {
-      const payload = {
-        titulo,
-        cliente: Number(clienteId),
-        descricao,
-        condicoes_pagamento: condicoesPagamento,
-        observacoes,
-        status: orcamentoEdit?.status || 'rascunho',
-        validade_dias: validade
-          ? Math.ceil((new Date(validade).getTime() - Date.now()) / 86400000)
-          : (orcamentoEdit?.validade_dias || 15),
-      }
-
+      const payload = { titulo, cliente: Number(clienteId), descricao, condicoes_pagamento: condicoesPagamento, observacoes, status: orcamentoEdit?.status || 'rascunho', validade_dias: validade ? Math.ceil((new Date(validade).getTime() - Date.now()) / 86400000) : (orcamentoEdit?.validade_dias || 15) }
       let orcId: number
-
       if (editando && orcamentoEdit) {
-        await api.patch(`/api/orcamentos/${orcamentoEdit.id}/`, payload)
-        orcId = orcamentoEdit.id
+        await api.patch(`/api/orcamentos/${orcamentoEdit.id}/`, payload); orcId = orcamentoEdit.id
         const itensAntigos = await api.get(`/api/itens/?orcamento=${orcId}`)
         await Promise.all(itensAntigos.data.map((i: Item) => api.delete(`/api/itens/${i.id}/`)))
-      } else {
-        const { data: orc } = await api.post('/api/orcamentos/', payload)
-        orcId = orc.id
-      }
-
-      const todosItens = [
-        ...materiais.filter(i => i.descricao.trim()),
-        ...maoDeObra.filter(i => i.descricao.trim()),
-      ]
-      await Promise.all(todosItens.map(item =>
-        api.post('/api/itens/', {
-          orcamento: orcId,
-          tipo: item.tipo,
-          descricao: item.descricao,
-          unidade: item.unidade,
-          quantidade: Number(item.quantidade),
-          valor_unitario: Number(item.valor_unitario),
-        })
-      ))
+      } else { const { data: orc } = await api.post('/api/orcamentos/', payload); orcId = orc.id }
+      const todosItens = [...materiais.filter(i => i.descricao.trim()), ...maoDeObra.filter(i => i.descricao.trim())]
+      await Promise.all(todosItens.map(item => api.post('/api/itens/', { orcamento: orcId, tipo: item.tipo, descricao: item.descricao, unidade: item.unidade, quantidade: Number(item.quantidade), valor_unitario: Number(item.valor_unitario) })))
       onSaved()
-    } catch (err) {
-      console.error('Erro ao salvar', err)
-    } finally {
-      setSalvando(false)
-    }
+    } catch (err) { console.error('Erro ao salvar', err) }
+    finally { setSalvando(false) }
   }
 
   return (
     <>
-      <div ref={overlayRef} onClick={handleOverlay}
+      <div ref={overlayRef} onClick={e => { if (e.target === overlayRef.current) handleClose() }}
         className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-2 sm:my-4 flex flex-col">
-
           <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10">
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-gray-900">
-                {editando ? 'Editar Orçamento' : 'Novo Orçamento'}
-              </h2>
-              <p className="text-xs text-gray-400 mt-0.5">
-                {editando ? `Editando #${orcamentoEdit?.id}` : 'Preencha os dados do orçamento'}
-              </p>
+              <h2 className="text-base sm:text-lg font-bold text-gray-900">{editando ? 'Editar Orçamento' : 'Novo Orçamento'}</h2>
+              <p className="text-xs text-gray-400 mt-0.5">{editando ? `Editando #${orcamentoEdit?.id}` : 'Preencha os dados do orçamento'}</p>
             </div>
-            <button onClick={handleClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all">
-              <X size={18} />
-            </button>
+            <button onClick={handleClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all"><X size={18} /></button>
           </div>
-
           {loadingItens ? (
-            <div className="flex items-center justify-center py-16 text-gray-400">
-              <Loader2 size={20} className="animate-spin mr-2" /> Carregando itens...
-            </div>
+            <div className="flex items-center justify-center py-16 text-gray-400"><Loader2 size={20} className="animate-spin mr-2" /> Carregando itens...</div>
           ) : (
             <div className="px-4 sm:px-6 py-5 space-y-5">
-
               <section className="bg-gray-50 rounded-2xl p-4">
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Cliente</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-semibold text-gray-500 mb-1.5 block">
-                      Selecionar Cliente <span className="text-red-500">*</span>
-                    </label>
-                    <select value={clienteId} onChange={e => { setClienteId(e.target.value); setErrors(p => ({ ...p, cliente: '' })) }}
-                      className={`w-full px-3 py-2.5 border rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 cursor-pointer
-                        ${errors.cliente ? 'border-red-400' : 'border-gray-200'}`}>
+                    <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Selecionar Cliente <span className="text-red-500">*</span></label>
+                    <select value={clienteId} onChange={e => { setClienteId(e.target.value); setErrors(p => ({ ...p, cliente: '' })) }} className={`w-full px-3 py-2.5 border rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 cursor-pointer ${errors.cliente ? 'border-red-400' : 'border-gray-200'}`}>
                       <option value="">Escolha um cliente</option>
                       {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                     </select>
                     {errors.cliente && <p className="text-xs text-red-500 mt-1">{errors.cliente}</p>}
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-gray-500 mb-1.5 block">
-                      Título do Orçamento <span className="text-red-500">*</span>
-                    </label>
-                    <input type="text" placeholder="Ex: Reforma de banheiro" value={titulo}
-                      onChange={e => { setTitulo(e.target.value); setErrors(p => ({ ...p, titulo: '' })) }}
-                      className={`w-full px-3 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500
-                        ${errors.titulo ? 'border-red-400' : 'border-gray-200'}`} />
+                    <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Título do Orçamento <span className="text-red-500">*</span></label>
+                    <input type="text" placeholder="Ex: Reforma de banheiro" value={titulo} onChange={e => { setTitulo(e.target.value); setErrors(p => ({ ...p, titulo: '' })) }} className={`w-full px-3 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 ${errors.titulo ? 'border-red-400' : 'border-gray-200'}`} />
                     {errors.titulo && <p className="text-xs text-red-500 mt-1">{errors.titulo}</p>}
                   </div>
                 </div>
               </section>
-
               <section className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-4">
-                <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-1 flex items-center gap-1.5">
-                  <Sparkles size={12} /> Assistente IA de Orçamento
-                </p>
-                <p className="text-xs text-blue-500/80 mb-3">Descreva o serviço — a IA monta o orçamento com materiais, mão de obra e preços de referência.</p>
-                <textarea rows={2} placeholder='Ex: "Reforma de banheiro 4m², troca de piso porcelanato..."'
-                  value={iaPrompt} onChange={e => setIaPrompt(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-blue-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none mb-3" />
-                <button onClick={gerarIA} disabled={iaLoading || !iaPrompt.trim()}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl text-sm font-semibold transition-all">
+                <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-1 flex items-center gap-1.5"><Sparkles size={12} /> Assistente IA de Orçamento</p>
+                <p className="text-xs text-blue-500/80 mb-3">Descreva o serviço — a IA monta o orçamento automaticamente.</p>
+                <textarea rows={2} placeholder='Ex: "Reforma de banheiro 4m², troca de piso porcelanato..."' value={iaPrompt} onChange={e => setIaPrompt(e.target.value)} className="w-full px-3 py-2.5 border border-blue-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none mb-3" />
+                <button onClick={gerarIA} disabled={iaLoading || !iaPrompt.trim()} className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl text-sm font-semibold transition-all">
                   {iaLoading ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
                   {iaLoading ? 'Gerando orçamento com IA...' : 'Gerar Orçamento com IA'}
                 </button>
                 {iaObservacao && (
                   <div className="mt-3 flex items-start gap-2.5 bg-white/70 border border-blue-200 rounded-xl px-3.5 py-3">
                     <Info size={14} className="text-blue-500 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="text-xs font-bold text-blue-700 mb-0.5">Observações da IA</p>
-                      <p className="text-xs text-blue-800/80 leading-relaxed">{iaObservacao}</p>
-                    </div>
+                    <div><p className="text-xs font-bold text-blue-700 mb-0.5">Observações da IA</p><p className="text-xs text-blue-800/80 leading-relaxed">{iaObservacao}</p></div>
                   </div>
                 )}
               </section>
-
               <section>
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Descrição do Serviço</p>
-                <textarea rows={2} placeholder="Descreva detalhadamente o serviço..."
-                  value={descricao} onChange={e => setDescricao(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
+                <textarea rows={2} placeholder="Descreva detalhadamente o serviço..." value={descricao} onChange={e => setDescricao(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
               </section>
-
               <section>
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Itens do Orçamento</p>
                 <div className="grid grid-cols-[1fr_70px_60px_100px_80px_32px] sm:grid-cols-[1fr_90px_80px_110px_90px_32px] gap-1.5 sm:gap-2 mb-2 px-1">
-                  {['Descrição', 'Und.', 'Qtd.', 'Unit.', 'Total', ''].map(h => (
-                    <div key={h} className="text-xs font-bold text-gray-400 uppercase tracking-wide">{h}</div>
-                  ))}
+                  {['Descrição', 'Und.', 'Qtd.', 'Unit.', 'Total', ''].map(h => <div key={h} className="text-xs font-bold text-gray-400 uppercase tracking-wide">{h}</div>)}
                 </div>
-
                 <div className="mb-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Package size={13} className="text-blue-500" />
-                    <span className="text-xs font-bold text-blue-600 uppercase tracking-wide">Materiais / Itens</span>
-                  </div>
-                  <div className="space-y-2">
-                    {materiais.map(item => (
-                      <ItemRow key={item._key} item={item}
-                        onChange={changeItem(materiais, setMateriais)}
-                        onRemove={k => removeItem('material', k)} />
-                    ))}
-                  </div>
-                  <button onClick={() => addItem('material')}
-                    className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-1.5 rounded-lg hover:bg-blue-50 transition-all">
-                    <Plus size={13} /> Adicionar material
-                  </button>
-                  <div className="text-xs text-gray-500 text-right mt-1">
-                    Subtotal Materiais: <span className="font-semibold text-gray-700">{fmt(totalMat)}</span>
-                  </div>
+                  <div className="flex items-center gap-2 mb-2"><Package size={13} className="text-blue-500" /><span className="text-xs font-bold text-blue-600 uppercase tracking-wide">Materiais / Itens</span></div>
+                  <div className="space-y-2">{materiais.map(item => <ItemRow key={item._key} item={item} onChange={changeItem(materiais, setMateriais)} onRemove={k => removeItem('material', k)} />)}</div>
+                  <button onClick={() => addItem('material')} className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-1.5 rounded-lg hover:bg-blue-50 transition-all"><Plus size={13} /> Adicionar material</button>
+                  <div className="text-xs text-gray-500 text-right mt-1">Subtotal Materiais: <span className="font-semibold text-gray-700">{fmt(totalMat)}</span></div>
                 </div>
-
                 <div className="border-t border-gray-100 pt-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Hammer size={13} className="text-orange-500" />
-                    <span className="text-xs font-bold text-orange-600 uppercase tracking-wide">Mão de Obra</span>
-                  </div>
-                  <div className="space-y-2">
-                    {maoDeObra.map(item => (
-                      <ItemRow key={item._key} item={item}
-                        onChange={changeItem(maoDeObra, setMaoDeObra)}
-                        onRemove={k => removeItem('mao_de_obra', k)} />
-                    ))}
-                  </div>
-                  <button onClick={() => addItem('mao_de_obra')}
-                    className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-orange-600 hover:text-orange-700 px-2 py-1.5 rounded-lg hover:bg-orange-50 transition-all">
-                    <Plus size={13} /> Adicionar mão de obra
-                  </button>
-                  <div className="text-xs text-gray-500 text-right mt-1">
-                    Subtotal Mão de Obra: <span className="font-semibold text-gray-700">{fmt(totalMao)}</span>
-                  </div>
+                  <div className="flex items-center gap-2 mb-2"><Hammer size={13} className="text-orange-500" /><span className="text-xs font-bold text-orange-600 uppercase tracking-wide">Mão de Obra</span></div>
+                  <div className="space-y-2">{maoDeObra.map(item => <ItemRow key={item._key} item={item} onChange={changeItem(maoDeObra, setMaoDeObra)} onRemove={k => removeItem('mao_de_obra', k)} />)}</div>
+                  <button onClick={() => addItem('mao_de_obra')} className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-orange-600 hover:text-orange-700 px-2 py-1.5 rounded-lg hover:bg-orange-50 transition-all"><Plus size={13} /> Adicionar mão de obra</button>
+                  <div className="text-xs text-gray-500 text-right mt-1">Subtotal Mão de Obra: <span className="font-semibold text-gray-700">{fmt(totalMao)}</span></div>
                 </div>
-
                 <div className="flex justify-end mt-4">
                   <div className="bg-gray-900 text-white rounded-xl px-4 sm:px-5 py-3 flex items-center gap-3 sm:gap-4">
                     <span className="text-sm font-semibold opacity-80">Total Geral</span>
@@ -556,174 +329,73 @@ function OrcamentoForm({ clientes, onClose, onSaved, orcamentoEdit }: OrcamentoF
                   </div>
                 </div>
               </section>
-
               <section className="bg-gray-50 rounded-2xl p-4">
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Detalhes</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Validade do Orçamento</label>
-                    <input type="date" value={validade} onChange={e => setValidade(e.target.value)}
-                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+                    <input type="date" value={validade} onChange={e => setValidade(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Condições de Pagamento</label>
-                    <input type="text" placeholder="Ex: 50% no ato, 50% na entrega..." value={condicoesPagamento}
-                      onChange={e => setCondicoesPagamento(e.target.value)}
-                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+                    <input type="text" placeholder="Ex: 50% no ato..." value={condicoesPagamento} onChange={e => setCondicoesPagamento(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
                   </div>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Observações</label>
-                  <textarea rows={2} placeholder="Informações adicionais..." value={observacoes}
-                    onChange={e => setObservacoes(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
+                  <textarea rows={2} placeholder="Informações adicionais..." value={observacoes} onChange={e => setObservacoes(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
                 </div>
               </section>
-
             </div>
           )}
-
           <div className="flex items-center justify-end gap-3 px-4 sm:px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white rounded-b-2xl">
-            <button onClick={handleClose}
-              className="px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-all">
-              Cancelar
-            </button>
-            <button onClick={salvar} disabled={salvando}
-              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl text-sm font-semibold transition-all shadow-sm">
+            <button onClick={handleClose} className="px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-all">Cancelar</button>
+            <button onClick={salvar} disabled={salvando} className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl text-sm font-semibold transition-all shadow-sm">
               {salvando && <Loader2 size={14} className="animate-spin" />}
               {salvando ? 'Salvando...' : editando ? 'Salvar Alterações' : 'Criar Orçamento'}
             </button>
           </div>
         </div>
       </div>
-
-      {showCancelConfirm && (
-        <ConfirmModal
-          msg="Deseja cancelar o orçamento?"
-          sub="Todos os dados preenchidos serão perdidos."
-          onConfirm={() => { setShowCancelConfirm(false); onClose() }}
-          onCancel={() => setShowCancelConfirm(false)}
-        />
-      )}
+      {showCancelConfirm && <ConfirmModal msg="Deseja cancelar o orçamento?" sub="Todos os dados preenchidos serão perdidos." onConfirm={() => { setShowCancelConfirm(false); onClose() }} onCancel={() => setShowCancelConfirm(false)} />}
     </>
   )
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// ── DETALHE ORÇAMENTO ─────────────────────────────────────────────────────────
-// ══════════════════════════════════════════════════════════════════════════════
 function DetalheOrcamento({ orc, onBack, onEdit }: { orc: Orcamento; onBack: () => void; onUpdate: () => void; onEdit: () => void }) {
   const [itens, setItens] = useState<Item[]>([])
   const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    api.get(`/api/itens/?orcamento=${orc.id}`)
-      .then(r => setItens(r.data))
-      .finally(() => setLoading(false))
-  }, [orc.id])
-
+  useEffect(() => { api.get(`/api/itens/?orcamento=${orc.id}`).then(r => setItens(r.data)).finally(() => setLoading(false)) }, [orc.id])
   const materiais = itens.filter(i => i.tipo === 'material')
   const maoDeObra = itens.filter(i => i.tipo === 'mao_de_obra')
-
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">
-      <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-5 transition-colors">
-        <ChevronRight size={15} className="rotate-180" /> Voltar aos orçamentos
-      </button>
-
+      <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-5 transition-colors"><ChevronRight size={15} className="rotate-180" /> Voltar aos orçamentos</button>
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
         <div>
-          <div className="flex items-center gap-3 mb-1">
-            <span className="text-xs font-bold text-gray-400">#{orc.id}</span>
-            <StatusBadge status={orc.status} />
-          </div>
+          <div className="flex items-center gap-3 mb-1"><span className="text-xs font-bold text-gray-400">#{orc.id}</span><StatusBadge status={orc.status} /></div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{orc.titulo}</h1>
           <p className="text-sm text-gray-500 mt-0.5">{orc.cliente_nome}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={onEdit}
-            className="flex items-center gap-2 px-3 sm:px-4 py-2.5 border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-semibold transition-all">
-            <Pencil size={15} /> Editar
-          </button>
-          <button onClick={() => gerarPDFComToken(orc.id)}
-            className="flex items-center gap-2 px-3 sm:px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm">
-            <FileText size={15} /> Gerar PDF
-          </button>
+          <button onClick={onEdit} className="flex items-center gap-2 px-3 sm:px-4 py-2.5 border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-semibold transition-all"><Pencil size={15} /> Editar</button>
+          <button onClick={() => gerarPDFComToken(orc.id)} className="flex items-center gap-2 px-3 sm:px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm"><FileText size={15} /> Gerar PDF</button>
         </div>
       </div>
-
-      {loading ? (
-        <div className="flex items-center justify-center py-16 text-gray-400">
-          <Loader2 size={20} className="animate-spin mr-2" /> Carregando...
-        </div>
-      ) : (
+      {loading ? <div className="flex items-center justify-center py-16 text-gray-400"><Loader2 size={20} className="animate-spin mr-2" /> Carregando...</div> : (
         <>
           {materiais.length > 0 && (
             <div className="bg-white rounded-2xl border border-gray-100 mb-4 overflow-hidden">
-              <div className="flex items-center gap-2 px-5 py-3 bg-gray-50 border-b border-gray-100">
-                <Package size={14} className="text-blue-500" />
-                <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">Materiais / Itens</span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[400px]">
-                  <thead>
-                    <tr className="text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100">
-                      <th className="text-left px-5 py-2.5">Descrição</th>
-                      <th className="text-center px-3 py-2.5">Unid.</th>
-                      <th className="text-center px-3 py-2.5">Qtd.</th>
-                      <th className="text-right px-3 py-2.5">Unit.</th>
-                      <th className="text-right px-5 py-2.5">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {materiais.map((item, i) => (
-                      <tr key={i} className={`text-sm ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
-                        <td className="px-5 py-3 text-gray-800">{item.descricao}</td>
-                        <td className="px-3 py-3 text-center text-gray-500">{item.unidade}</td>
-                        <td className="px-3 py-3 text-center text-gray-500">{item.quantidade}</td>
-                        <td className="px-3 py-3 text-right text-gray-500">{fmt(Number(item.valor_unitario))}</td>
-                        <td className="px-5 py-3 text-right font-semibold text-gray-700">{fmt(Number(item.subtotal || 0))}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <div className="flex items-center gap-2 px-5 py-3 bg-gray-50 border-b border-gray-100"><Package size={14} className="text-blue-500" /><span className="text-xs font-bold text-gray-600 uppercase tracking-wide">Materiais / Itens</span></div>
+              <div className="overflow-x-auto"><table className="w-full min-w-[400px]"><thead><tr className="text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100"><th className="text-left px-5 py-2.5">Descrição</th><th className="text-center px-3 py-2.5">Unid.</th><th className="text-center px-3 py-2.5">Qtd.</th><th className="text-right px-3 py-2.5">Unit.</th><th className="text-right px-5 py-2.5">Total</th></tr></thead><tbody>{materiais.map((item, i) => <tr key={i} className={`text-sm ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}><td className="px-5 py-3 text-gray-800">{item.descricao}</td><td className="px-3 py-3 text-center text-gray-500">{item.unidade}</td><td className="px-3 py-3 text-center text-gray-500">{item.quantidade}</td><td className="px-3 py-3 text-right text-gray-500">{fmt(Number(item.valor_unitario))}</td><td className="px-5 py-3 text-right font-semibold text-gray-700">{fmt(Number(item.subtotal || 0))}</td></tr>)}</tbody></table></div>
             </div>
           )}
-
           {maoDeObra.length > 0 && (
             <div className="bg-white rounded-2xl border border-gray-100 mb-4 overflow-hidden">
-              <div className="flex items-center gap-2 px-5 py-3 bg-orange-50 border-b border-orange-100">
-                <Hammer size={14} className="text-orange-500" />
-                <span className="text-xs font-bold text-orange-600 uppercase tracking-wide">Mão de Obra</span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[400px]">
-                  <thead>
-                    <tr className="text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100">
-                      <th className="text-left px-5 py-2.5">Descrição</th>
-                      <th className="text-center px-3 py-2.5">Unid.</th>
-                      <th className="text-center px-3 py-2.5">Qtd.</th>
-                      <th className="text-right px-3 py-2.5">Unit.</th>
-                      <th className="text-right px-5 py-2.5">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {maoDeObra.map((item, i) => (
-                      <tr key={i} className={`text-sm ${i % 2 === 0 ? 'bg-white' : 'bg-orange-50/30'}`}>
-                        <td className="px-5 py-3 text-gray-800">{item.descricao}</td>
-                        <td className="px-3 py-3 text-center text-gray-500">{item.unidade}</td>
-                        <td className="px-3 py-3 text-center text-gray-500">{item.quantidade}</td>
-                        <td className="px-3 py-3 text-right text-gray-500">{fmt(Number(item.valor_unitario))}</td>
-                        <td className="px-5 py-3 text-right font-semibold text-gray-700">{fmt(Number(item.subtotal || 0))}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <div className="flex items-center gap-2 px-5 py-3 bg-orange-50 border-b border-orange-100"><Hammer size={14} className="text-orange-500" /><span className="text-xs font-bold text-orange-600 uppercase tracking-wide">Mão de Obra</span></div>
+              <div className="overflow-x-auto"><table className="w-full min-w-[400px]"><thead><tr className="text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100"><th className="text-left px-5 py-2.5">Descrição</th><th className="text-center px-3 py-2.5">Unid.</th><th className="text-center px-3 py-2.5">Qtd.</th><th className="text-right px-3 py-2.5">Unit.</th><th className="text-right px-5 py-2.5">Total</th></tr></thead><tbody>{maoDeObra.map((item, i) => <tr key={i} className={`text-sm ${i % 2 === 0 ? 'bg-white' : 'bg-orange-50/30'}`}><td className="px-5 py-3 text-gray-800">{item.descricao}</td><td className="px-3 py-3 text-center text-gray-500">{item.unidade}</td><td className="px-3 py-3 text-center text-gray-500">{item.quantidade}</td><td className="px-3 py-3 text-right text-gray-500">{fmt(Number(item.valor_unitario))}</td><td className="px-5 py-3 text-right font-semibold text-gray-700">{fmt(Number(item.subtotal || 0))}</td></tr>)}</tbody></table></div>
             </div>
           )}
-
           <div className="flex justify-end">
             <div className="bg-gray-900 text-white rounded-xl px-4 sm:px-6 py-3 sm:py-4 flex items-center gap-4 sm:gap-6">
               <span className="text-sm font-semibold opacity-70">Total Geral</span>
@@ -736,10 +408,8 @@ function DetalheOrcamento({ orc, onBack, onEdit }: { orc: Orcamento; onBack: () 
   )
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// ── MAIN PAGE ─────────────────────────────────────────────────────────────────
-// ══════════════════════════════════════════════════════════════════════════════
 export default function Orcamentos() {
+  const { pathname } = useLocation()
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
@@ -753,186 +423,79 @@ export default function Orcamentos() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [orc, cli] = await Promise.all([
-        api.get('/api/orcamentos/'),
-        api.get('/api/clientes/'),
-      ])
-      setOrcamentos(orc.data)
-      setClientes(cli.data)
-    } finally {
-      setLoading(false)
-    }
+      const [orc, cli] = await Promise.all([api.get('/api/orcamentos/'), api.get('/api/clientes/')])
+      setOrcamentos(orc.data); setClientes(cli.data)
+    } finally { setLoading(false) }
   }, [])
 
   useEffect(() => { fetchAll() }, [fetchAll])
-
   useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenu(null)
-    }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
+    const h = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenu(null) }
+    document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h)
   }, [])
 
-  const changeStatus = async (id: number, status: string) => {
-    await api.patch(`/api/orcamentos/${id}/`, { status })
-    setMenu(null)
-    fetchAll()
-  }
+  const changeStatus = async (id: number, status: string) => { await api.patch(`/api/orcamentos/${id}/`, { status }); setMenu(null); fetchAll() }
+  const deletar = async (id: number) => { await api.delete(`/api/orcamentos/${id}/`); setConfirmDelete(null); fetchAll() }
+  const filtrados = orcamentos.filter(o => o.titulo?.toLowerCase().includes(busca.toLowerCase()) || o.cliente_nome?.toLowerCase().includes(busca.toLowerCase()))
 
-  const deletar = async (id: number) => {
-    await api.delete(`/api/orcamentos/${id}/`)
-    setConfirmDelete(null)
-    fetchAll()
-  }
-
-  const filtrados = orcamentos.filter(o =>
-    o.titulo?.toLowerCase().includes(busca.toLowerCase()) ||
-    o.cliente_nome?.toLowerCase().includes(busca.toLowerCase())
-  )
-
-  if (editando) {
-    return (
-      <OrcamentoForm
-        clientes={clientes}
-        onClose={() => setEditando(null)}
-        onSaved={() => { setEditando(null); setDetalhe(null); fetchAll() }}
-        orcamentoEdit={editando}
-      />
-    )
-  }
-
-  if (detalhe) {
-    return (
-      <DetalheOrcamento
-        orc={detalhe}
-        onBack={() => setDetalhe(null)}
-        onUpdate={fetchAll}
-        onEdit={() => setEditando(detalhe)}
-      />
-    )
-  }
+  if (editando) return <OrcamentoForm clientes={clientes} onClose={() => setEditando(null)} onSaved={() => { setEditando(null); setDetalhe(null); fetchAll() }} orcamentoEdit={editando} />
+  if (detalhe) return <DetalheOrcamento orc={detalhe} onBack={() => setDetalhe(null)} onUpdate={fetchAll} onEdit={() => setEditando(detalhe)} />
 
   return (
-    <div className="p-4 sm:p-6 max-w-5xl mx-auto">
-
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Orçamentos</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{orcamentos.length} orçamento{orcamentos.length !== 1 ? 's' : ''}</p>
+    <>
+      <Guia rota={pathname} />
+      <div className="p-4 sm:p-6 max-w-5xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Orçamentos</h1>
+            <p className="text-sm text-gray-500 mt-0.5">{orcamentos.length} orçamento{orcamentos.length !== 1 ? 's' : ''}</p>
+          </div>
+          <button onClick={() => setShowNovo(true)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm">
+            <Plus size={16} /> <span className="hidden sm:inline">Novo Orçamento</span><span className="sm:hidden">Novo</span>
+          </button>
         </div>
-        <button onClick={() => setShowNovo(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm hover:shadow-md">
-          <Plus size={16} /> <span className="hidden sm:inline">Novo Orçamento</span><span className="sm:hidden">Novo</span>
-        </button>
-      </div>
-
-      <div className="relative mb-5">
-        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input type="text" placeholder="Buscar por título ou cliente..."
-          value={busca} onChange={e => setBusca(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 bg-white" />
-      </div>
-
-      {loading ? (
-        <div className="flex items-center justify-center py-16 text-gray-400">
-          <Loader2 size={24} className="animate-spin mr-2" /> Carregando...
+        <div className="relative mb-5">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input type="text" placeholder="Buscar por título ou cliente..." value={busca} onChange={e => setBusca(e.target.value)} className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 bg-white" />
         </div>
-      ) : filtrados.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
-          <FileText size={40} className="mx-auto mb-3 opacity-30" />
-          <p className="font-medium">Nenhum orçamento encontrado</p>
-          <p className="text-sm mt-1">Clique em "Novo" para começar</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filtrados.map(orc => (
-            <div key={orc.id}
-              className="bg-white rounded-2xl border border-gray-100 px-3 sm:px-5 py-3 sm:py-4 hover:shadow-md transition-all flex items-center gap-3 sm:gap-4">
-              <div className="w-8 sm:w-9 h-8 sm:h-9 rounded-xl bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 flex-shrink-0">
-                #{orc.id}
-              </div>
-              <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setDetalhe(orc)}>
-                <p className="font-semibold text-gray-900 truncate text-sm sm:text-base">{orc.titulo}</p>
-                <p className="text-xs text-gray-400 mt-0.5 truncate">
-                  {orc.cliente_nome} · {new Date(orc.criado_em).toLocaleDateString('pt-BR')}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-                <StatusBadge status={orc.status} />
-                <span className="text-sm font-bold text-gray-800 hidden sm:block min-w-[80px] text-right">
-                  {fmt(orc.total_geral)}
-                </span>
-                <div className="relative" ref={menu === orc.id ? menuRef : undefined}>
-                  <button
-                    onClick={e => { e.stopPropagation(); setMenu(menu === orc.id ? null : orc.id) }}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all">
-                    <MoreVertical size={16} />
-                  </button>
-                  {menu === orc.id && (
-                    <div className="absolute right-0 top-full mt-1 bg-white border border-gray-100 rounded-2xl shadow-xl z-20 py-1.5 w-52 overflow-hidden">
-                      <button onClick={() => { setDetalhe(orc); setMenu(null) }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-                        <Eye size={15} className="text-gray-400" /> Ver detalhes
-                      </button>
-                      <button onClick={() => { setEditando(orc); setMenu(null) }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-                        <Pencil size={15} className="text-gray-400" /> Editar
-                      </button>
-                      <div className="h-px bg-gray-100 mx-3 my-1" />
-                      {orc.status !== 'enviado' && orc.status !== 'aprovado' && (
-                        <button onClick={() => changeStatus(orc.id, 'enviado')}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-amber-700 hover:bg-amber-50 transition-colors">
-                          <Send size={15} className="text-amber-500" /> Marcar como Enviado
-                        </button>
+        {loading ? <div className="flex items-center justify-center py-16 text-gray-400"><Loader2 size={24} className="animate-spin mr-2" /> Carregando...</div>
+          : filtrados.length === 0 ? <div className="text-center py-16 text-gray-400"><FileText size={40} className="mx-auto mb-3 opacity-30" /><p className="font-medium">Nenhum orçamento encontrado</p><p className="text-sm mt-1">Clique em "Novo" para começar</p></div>
+          : (
+            <div className="space-y-3">
+              {filtrados.map(orc => (
+                <div key={orc.id} className="bg-white rounded-2xl border border-gray-100 px-3 sm:px-5 py-3 sm:py-4 hover:shadow-md transition-all flex items-center gap-3 sm:gap-4">
+                  <div className="w-8 sm:w-9 h-8 sm:h-9 rounded-xl bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 flex-shrink-0">#{orc.id}</div>
+                  <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setDetalhe(orc)}>
+                    <p className="font-semibold text-gray-900 truncate text-sm sm:text-base">{orc.titulo}</p>
+                    <p className="text-xs text-gray-400 mt-0.5 truncate">{orc.cliente_nome} · {new Date(orc.criado_em).toLocaleDateString('pt-BR')}</p>
+                  </div>
+                  <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+                    <StatusBadge status={orc.status} />
+                    <span className="text-sm font-bold text-gray-800 hidden sm:block min-w-[80px] text-right">{fmt(orc.total_geral)}</span>
+                    <div className="relative" ref={menu === orc.id ? menuRef : undefined}>
+                      <button onClick={e => { e.stopPropagation(); setMenu(menu === orc.id ? null : orc.id) }} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all"><MoreVertical size={16} /></button>
+                      {menu === orc.id && (
+                        <div className="absolute right-0 top-full mt-1 bg-white border border-gray-100 rounded-2xl shadow-xl z-20 py-1.5 w-52 overflow-hidden">
+                          <button onClick={() => { setDetalhe(orc); setMenu(null) }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"><Eye size={15} className="text-gray-400" /> Ver detalhes</button>
+                          <button onClick={() => { setEditando(orc); setMenu(null) }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"><Pencil size={15} className="text-gray-400" /> Editar</button>
+                          <div className="h-px bg-gray-100 mx-3 my-1" />
+                          {orc.status !== 'enviado' && orc.status !== 'aprovado' && <button onClick={() => changeStatus(orc.id, 'enviado')} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-amber-700 hover:bg-amber-50 transition-colors"><Send size={15} className="text-amber-500" /> Marcar como Enviado</button>}
+                          {orc.status !== 'aprovado' && <button onClick={() => changeStatus(orc.id, 'aprovado')} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-green-700 hover:bg-green-50 transition-colors"><CheckCircle size={15} className="text-green-500" /> Aprovar</button>}
+                          {orc.status !== 'recusado' && <button onClick={() => changeStatus(orc.id, 'recusado')} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-700 hover:bg-red-50 transition-colors"><XCircle size={15} className="text-red-500" /> Recusar</button>}
+                          <button onClick={() => { gerarPDFComToken(orc.id); setMenu(null) }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-blue-700 hover:bg-blue-50 transition-colors"><FileText size={15} className="text-blue-500" /> Gerar PDF</button>
+                          <div className="h-px bg-gray-100 mx-3 my-1" />
+                          <button onClick={() => { setConfirmDelete(orc.id); setMenu(null) }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"><Trash2 size={15} className="text-red-500" /> Excluir</button>
+                        </div>
                       )}
-                      {orc.status !== 'aprovado' && (
-                        <button onClick={() => changeStatus(orc.id, 'aprovado')}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-green-700 hover:bg-green-50 transition-colors">
-                          <CheckCircle size={15} className="text-green-500" /> Aprovar
-                        </button>
-                      )}
-                      {orc.status !== 'recusado' && (
-                        <button onClick={() => changeStatus(orc.id, 'recusado')}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-700 hover:bg-red-50 transition-colors">
-                          <XCircle size={15} className="text-red-500" /> Recusar
-                        </button>
-                      )}
-                      <button onClick={() => { gerarPDFComToken(orc.id); setMenu(null) }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-blue-700 hover:bg-blue-50 transition-colors">
-                        <FileText size={15} className="text-blue-500" /> Gerar PDF
-                      </button>
-                      <div className="h-px bg-gray-100 mx-3 my-1" />
-                      <button onClick={() => { setConfirmDelete(orc.id); setMenu(null) }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors">
-                        <Trash2 size={15} className="text-red-500" /> Excluir
-                      </button>
                     </div>
-                  )}
+                  </div>
                 </div>
-              </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
-
-      {showNovo && (
-        <OrcamentoForm
-          clientes={clientes}
-          onClose={() => setShowNovo(false)}
-          onSaved={() => { setShowNovo(false); fetchAll() }}
-        />
-      )}
-
-      {confirmDelete !== null && (
-        <ConfirmModal
-          msg="Excluir este orçamento?"
-          sub="Esta ação não pode ser desfeita."
-          danger
-          onConfirm={() => deletar(confirmDelete)}
-          onCancel={() => setConfirmDelete(null)}
-        />
-      )}
-    </div>
+          )}
+        {showNovo && <OrcamentoForm clientes={clientes} onClose={() => setShowNovo(false)} onSaved={() => { setShowNovo(false); fetchAll() }} />}
+        {confirmDelete !== null && <ConfirmModal msg="Excluir este orçamento?" sub="Esta ação não pode ser desfeita." danger onConfirm={() => deletar(confirmDelete)} onCancel={() => setConfirmDelete(null)} />}
+      </div>
+    </>
   )
 }
